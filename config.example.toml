@@ -1,0 +1,11 @@
+# Copy this to config.toml and customize.
+
+[trading]
+stake = 10000
+max_position_pct = 0.40
+stop_loss_pct = 0.05
+data_provider = "yahoo"
+strategies = ["momentum"]
+risk_manager = "fixed_stake"
+broker = "manual"
+watchlist = ["AAPL", "MSFT", "GOOG", "AMZN", "NVDA"]
