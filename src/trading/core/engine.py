@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 from typing import Any
 
 from trading.core.config import TradingConfig
 from trading.core.models import AssetClass, Instrument, Position
+
+logger = logging.getLogger(__name__)
 
 
 class TradingEngine:
@@ -47,36 +50,40 @@ class TradingEngine:
         for symbol in target_symbols:
             instrument = Instrument(symbol=symbol, asset_class=AssetClass.EQUITY)
 
-            # Stage 1: Fetch data
-            bars = self.data_provider.fetch_bars(instrument, start, end)
-            if bars.empty:
+            try:
+                # Stage 1: Fetch data
+                bars = self.data_provider.fetch_bars(instrument, start, end)
+                if bars.empty:
+                    continue
+
+                # Stage 2: Generate signals from all strategies
+                for strategy in self.strategies:
+                    signals = strategy.generate_signals(instrument, bars)
+
+                    for signal in signals:
+                        current_price = float(bars["close"].iloc[-1])
+
+                        # Stage 3: Risk filtering and sizing
+                        order = self.risk_manager.evaluate(
+                            signal=signal,
+                            current_price=current_price,
+                            positions=self.positions,
+                            cash=self.cash,
+                        )
+
+                        if order is None:
+                            continue
+
+                        # Stage 4: Generate playbook
+                        playbook = self.broker.present_order(order, current_price)
+
+                        results.append({
+                            "signal": signal,
+                            "order": order,
+                            "playbook": playbook,
+                        })
+            except Exception:
+                logger.warning("Failed to process %s, skipping", symbol, exc_info=True)
                 continue
-
-            # Stage 2: Generate signals from all strategies
-            for strategy in self.strategies:
-                signals = strategy.generate_signals(instrument, bars)
-
-                for signal in signals:
-                    current_price = float(bars["close"].iloc[-1])
-
-                    # Stage 3: Risk filtering and sizing
-                    order = self.risk_manager.evaluate(
-                        signal=signal,
-                        current_price=current_price,
-                        positions=self.positions,
-                        cash=self.cash,
-                    )
-
-                    if order is None:
-                        continue
-
-                    # Stage 4: Generate playbook
-                    playbook = self.broker.present_order(order, current_price)
-
-                    results.append({
-                        "signal": signal,
-                        "order": order,
-                        "playbook": playbook,
-                    })
 
         return results

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Self
-
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class AssetClass(str, Enum):
@@ -68,11 +66,6 @@ class Signal(BaseModel):
     strategy_name: str
     timestamp: datetime
 
-    @model_validator(mode="after")
-    def validate_conviction_range(self) -> Self:
-        if not 0.0 <= self.conviction <= 1.0:
-            raise ValueError(f"Conviction must be between 0 and 1, got {self.conviction}")
-        return self
 
 
 class Order(BaseModel):
@@ -100,11 +93,9 @@ class TaxLot(BaseModel):
         return days_held >= 365
 
     def days_to_long_term(self, as_of: date) -> int:
-        long_term_date = date(
-            self.purchase_date.year + 1,
-            self.purchase_date.month,
-            self.purchase_date.day,
-        )
+        from datetime import timedelta
+
+        long_term_date = self.purchase_date + timedelta(days=365)
         remaining = (long_term_date - as_of).days
         return max(0, remaining)
 
@@ -156,4 +147,7 @@ class Trade(BaseModel):
 
     @property
     def return_pct(self) -> float:
-        return (self.exit_price - self.entry_price) / self.entry_price * 100
+        if self.direction == Direction.LONG:
+            return (self.exit_price - self.entry_price) / self.entry_price * 100
+        else:
+            return (self.entry_price - self.exit_price) / self.entry_price * 100

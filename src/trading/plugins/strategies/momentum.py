@@ -108,10 +108,11 @@ class MomentumStrategy:
 
             cross_strength = min(abs(pct_above_long) / 5.0, 0.4)
             conviction += cross_strength
+            position_word = "above" if pct_above_long > 0 else "below"
             rationale_parts.append(
                 f"{instrument.symbol}'s price (${latest_close:.2f}) is trading "
-                f"{abs(pct_above_long):.1f}% below its {self.long_window}-day moving average, "
-                f"indicating a downward trend"
+                f"{abs(pct_above_long):.1f}% {position_word} its {self.long_window}-day moving average, "
+                f"indicating a weakening trend"
             )
 
             if latest_rsi < 30:
