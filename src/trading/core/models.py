@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -151,3 +152,60 @@ class Trade(BaseModel):
             return (self.exit_price - self.entry_price) / self.entry_price * 100
         else:
             return (self.entry_price - self.exit_price) / self.entry_price * 100
+
+
+class PlayType(str, Enum):
+    COVERED_CALL = "covered_call"
+    PROTECTIVE_PUT = "protective_put"
+    STOP_LOSS = "stop_loss"
+    TRIM = "trim"
+    ADD = "add"
+    HOLD = "hold"
+
+
+class OptionContract(BaseModel):
+    """A single option contract with market data."""
+
+    contract_symbol: str
+    strike: float
+    expiration: date
+    option_type: str  # "call" or "put"
+    bid: float
+    ask: float
+    last_price: float
+    volume: int
+    open_interest: int
+    implied_volatility: float
+    in_the_money: bool
+
+    @property
+    def mid_price(self) -> float:
+        return (self.bid + self.ask) / 2
+
+
+class OptionChain(BaseModel):
+    """Option chain for a single expiration date."""
+
+    instrument: Instrument
+    expiration: date
+    calls: list[OptionContract]
+    puts: list[OptionContract]
+
+
+class Play(BaseModel):
+    """A recommended play for a position."""
+
+    position: Position
+    play_type: PlayType
+    title: str
+    rationale: str
+    conviction: float = Field(ge=0.0, le=1.0)
+    option_contract: Optional[OptionContract] = None
+    contracts: int = 0
+    premium: float = 0.0
+    max_profit: Optional[float] = None
+    max_loss: Optional[float] = None
+    breakeven: Optional[float] = None
+    tax_note: Optional[str] = None
+    playbook: str
+    advisor_name: str

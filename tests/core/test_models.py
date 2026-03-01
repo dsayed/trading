@@ -7,8 +7,12 @@ from trading.core.models import (
     Bar,
     Direction,
     Instrument,
+    OptionChain,
+    OptionContract,
     Order,
     OrderType,
+    Play,
+    PlayType,
     Position,
     Signal,
     TaxLot,
@@ -203,3 +207,135 @@ class TestTrade:
         assert trade.holding_days == 27
         assert trade.is_long_term is False
         assert trade.return_pct == pytest.approx((196.00 - 185.20) / 185.20 * 100, rel=1e-2)
+
+
+class TestOptionContract:
+    def test_create_option_contract(self):
+        contract = OptionContract(
+            contract_symbol="AAPL260320C00200000",
+            strike=200.0,
+            expiration=date(2026, 3, 20),
+            option_type="call",
+            bid=5.20,
+            ask=5.50,
+            last_price=5.35,
+            volume=1200,
+            open_interest=5000,
+            implied_volatility=0.32,
+            in_the_money=False,
+        )
+        assert contract.strike == 200.0
+        assert contract.option_type == "call"
+        assert contract.in_the_money is False
+
+    def test_mid_price(self):
+        contract = OptionContract(
+            contract_symbol="AAPL260320C00200000",
+            strike=200.0,
+            expiration=date(2026, 3, 20),
+            option_type="call",
+            bid=5.20,
+            ask=5.50,
+            last_price=5.35,
+            volume=1200,
+            open_interest=5000,
+            implied_volatility=0.32,
+            in_the_money=False,
+        )
+        assert contract.mid_price == pytest.approx(5.35)
+
+
+class TestOptionChain:
+    def test_create_option_chain(self):
+        inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
+        call = OptionContract(
+            contract_symbol="AAPL260320C00200000",
+            strike=200.0,
+            expiration=date(2026, 3, 20),
+            option_type="call",
+            bid=5.20,
+            ask=5.50,
+            last_price=5.35,
+            volume=1200,
+            open_interest=5000,
+            implied_volatility=0.32,
+            in_the_money=False,
+        )
+        put = OptionContract(
+            contract_symbol="AAPL260320P00180000",
+            strike=180.0,
+            expiration=date(2026, 3, 20),
+            option_type="put",
+            bid=2.10,
+            ask=2.40,
+            last_price=2.25,
+            volume=800,
+            open_interest=3000,
+            implied_volatility=0.28,
+            in_the_money=False,
+        )
+        chain = OptionChain(
+            instrument=inst,
+            expiration=date(2026, 3, 20),
+            calls=[call],
+            puts=[put],
+        )
+        assert len(chain.calls) == 1
+        assert len(chain.puts) == 1
+        assert chain.expiration == date(2026, 3, 20)
+
+
+class TestPlay:
+    def test_create_play(self):
+        inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
+        lot = TaxLot(instrument=inst, quantity=100, cost_basis=180.0, purchase_date=date(2025, 6, 1))
+        pos = Position(instrument=inst, tax_lots=[lot])
+        play = Play(
+            position=pos,
+            play_type=PlayType.COVERED_CALL,
+            title="Sell covered calls on AAPL",
+            rationale="Generate income on existing position",
+            conviction=0.75,
+            contracts=1,
+            premium=520.0,
+            max_profit=2520.0,
+            max_loss=None,
+            breakeven=174.80,
+            playbook="1. Sell to Open 1 AAPL $200 Call\n2. Expiration: Mar 20",
+            advisor_name="covered_call",
+        )
+        assert play.play_type == PlayType.COVERED_CALL
+        assert play.conviction == 0.75
+        assert play.contracts == 1
+
+    def test_play_with_tax_note(self):
+        inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
+        lot = TaxLot(instrument=inst, quantity=50, cost_basis=180.0, purchase_date=date(2026, 1, 1))
+        pos = Position(instrument=inst, tax_lots=[lot])
+        play = Play(
+            position=pos,
+            play_type=PlayType.TRIM,
+            title="Trim AAPL position",
+            rationale="Position up significantly",
+            conviction=0.60,
+            tax_note="Short-term gains: held < 1 year. Consider waiting 307 days for long-term treatment.",
+            playbook="1. Sell 20 shares at market",
+            advisor_name="stock_play",
+        )
+        assert play.tax_note is not None
+        assert "short-term" in play.tax_note.lower()
+
+    def test_play_conviction_validation(self):
+        inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
+        lot = TaxLot(instrument=inst, quantity=50, cost_basis=180.0, purchase_date=date(2026, 1, 1))
+        pos = Position(instrument=inst, tax_lots=[lot])
+        with pytest.raises(ValueError):
+            Play(
+                position=pos,
+                play_type=PlayType.HOLD,
+                title="Hold",
+                rationale="No action",
+                conviction=1.5,
+                playbook="Hold position",
+                advisor_name="stock_play",
+            )

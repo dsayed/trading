@@ -7,3 +7,6 @@ dist/
 build/
 .env
 config.toml
+*.db
+node_modules/
+dashboard/dist/

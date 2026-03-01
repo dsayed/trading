@@ -8,6 +8,7 @@ from typing import Any
 
 from trading.core.config import TradingConfig
 from trading.core.models import AssetClass, Instrument, Position
+from trading.plugins.data.base import OptionsDataProvider
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,67 @@ class TradingEngine:
                         })
             except Exception:
                 logger.warning("Failed to process %s, skipping", symbol, exc_info=True)
+                continue
+
+        return results
+
+    def advise(
+        self,
+        positions: list[Position],
+        advisors: list[Any],
+        lookback_days: int = 120,
+    ) -> list[dict[str, Any]]:
+        """Run advisor pipeline: for each position, gather data and collect plays."""
+        if not positions or not advisors:
+            return []
+
+        end = date.today()
+        start = end - timedelta(days=lookback_days)
+        results = []
+        supports_options = isinstance(self.data_provider, OptionsDataProvider)
+
+        for position in positions:
+            try:
+                bars = self.data_provider.fetch_bars(position.instrument, start, end)
+                if bars.empty:
+                    current_price = 0.0
+                else:
+                    current_price = float(bars["close"].iloc[-1])
+
+                option_chains = []
+                if supports_options:
+                    try:
+                        option_chains = self.data_provider.fetch_option_chain(
+                            position.instrument
+                        )
+                    except Exception:
+                        logger.warning(
+                            "Failed to fetch option chains for %s",
+                            position.instrument.symbol,
+                            exc_info=True,
+                        )
+
+                all_plays = []
+                for advisor in advisors:
+                    plays = advisor.advise(
+                        position, bars, option_chains, current_price
+                    )
+                    all_plays.extend(plays)
+
+                pnl = position.unrealized_pnl(current_price) if current_price > 0 else 0.0
+
+                results.append({
+                    "position": position,
+                    "current_price": current_price,
+                    "unrealized_pnl": pnl,
+                    "plays": all_plays,
+                })
+            except Exception:
+                logger.warning(
+                    "Failed to advise on %s, skipping",
+                    position.instrument.symbol,
+                    exc_info=True,
+                )
                 continue
 
         return results

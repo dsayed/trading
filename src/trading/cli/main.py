@@ -10,12 +10,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from trading.core.config import TradingConfig, load_config
-from trading.core.engine import TradingEngine
-from trading.plugins.brokers.manual import ManualBroker
-from trading.plugins.data.yahoo import YahooFinanceProvider
-from trading.plugins.risk.fixed_stake import FixedStakeRiskManager
-from trading.plugins.strategies.momentum import MomentumStrategy
+from trading.core.config import load_config
+from trading.core.factory import build_engine
 
 app = typer.Typer(help="Hybrid trading system — automated signals, manual execution.")
 console = Console()
@@ -29,29 +25,7 @@ def main() -> None:
 def _build_engine(config_path: Path = Path("config.toml")) -> TradingEngine:
     """Build the trading engine from config, wiring up all plugins."""
     config = load_config(config_path)
-
-    data_provider = YahooFinanceProvider()
-
-    strategy_map = {
-        "momentum": MomentumStrategy,
-    }
-    strategies = [strategy_map[name]() for name in config.strategies if name in strategy_map]
-
-    risk_manager = FixedStakeRiskManager(
-        stake=config.stake,
-        max_position_pct=config.max_position_pct,
-        stop_loss_pct=config.stop_loss_pct,
-    )
-
-    broker = ManualBroker()
-
-    return TradingEngine(
-        data_provider=data_provider,
-        strategies=strategies,
-        risk_manager=risk_manager,
-        broker=broker,
-        config=config,
-    )
+    return build_engine(config)
 
 
 @app.command()

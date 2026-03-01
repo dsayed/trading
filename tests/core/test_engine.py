@@ -14,8 +14,11 @@ from trading.core.models import (
     Instrument,
     Order,
     OrderType,
+    Play,
+    PlayType,
     Position,
     Signal,
+    TaxLot,
 )
 
 
@@ -139,3 +142,119 @@ class TestTradingEngine:
         results = engine.scan(symbols=["AAPL"])
         assert len(results) == 1
         assert results[0]["signal"].instrument.symbol == "AAPL"
+
+
+class FakeAdvisor:
+    @property
+    def name(self) -> str:
+        return "fake_advisor"
+
+    def advise(self, position, bars, option_chains, current_price) -> list[Play]:
+        return [
+            Play(
+                position=position,
+                play_type=PlayType.HOLD,
+                title=f"Hold {position.instrument.symbol}",
+                rationale="Fake hold recommendation",
+                conviction=0.50,
+                playbook="1. Hold position",
+                advisor_name=self.name,
+            )
+        ]
+
+
+class TestAdvise:
+    def test_advise_returns_results(self):
+        inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
+        lot = TaxLot(instrument=inst, quantity=50, cost_basis=180.0, purchase_date=date(2025, 6, 1))
+        pos = Position(instrument=inst, tax_lots=[lot])
+
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(watchlist=["AAPL"]),
+        )
+        results = engine.advise([pos], [FakeAdvisor()])
+        assert len(results) == 1
+        assert results[0]["position"] == pos
+        assert results[0]["current_price"] > 0
+        assert len(results[0]["plays"]) == 1
+
+    def test_advise_computes_unrealized_pnl(self):
+        inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
+        lot = TaxLot(instrument=inst, quantity=50, cost_basis=180.0, purchase_date=date(2025, 6, 1))
+        pos = Position(instrument=inst, tax_lots=[lot])
+
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.advise([pos], [FakeAdvisor()])
+        assert results[0]["unrealized_pnl"] != 0  # price != cost basis
+
+    def test_advise_multiple_positions(self):
+        inst_a = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
+        inst_m = Instrument(symbol="MSFT", asset_class=AssetClass.EQUITY)
+        lot_a = TaxLot(instrument=inst_a, quantity=50, cost_basis=180.0, purchase_date=date(2025, 6, 1))
+        lot_m = TaxLot(instrument=inst_m, quantity=30, cost_basis=300.0, purchase_date=date(2025, 6, 1))
+
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.advise(
+            [Position(instrument=inst_a, tax_lots=[lot_a]),
+             Position(instrument=inst_m, tax_lots=[lot_m])],
+            [FakeAdvisor()],
+        )
+        assert len(results) == 2
+
+    def test_advise_empty_positions(self):
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.advise([], [FakeAdvisor()])
+        assert results == []
+
+    def test_advise_empty_advisors(self):
+        inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
+        lot = TaxLot(instrument=inst, quantity=50, cost_basis=180.0, purchase_date=date(2025, 6, 1))
+        pos = Position(instrument=inst, tax_lots=[lot])
+
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.advise([pos], [])
+        assert results == []
+
+    def test_advise_with_empty_data(self):
+        inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
+        lot = TaxLot(instrument=inst, quantity=50, cost_basis=180.0, purchase_date=date(2025, 6, 1))
+        pos = Position(instrument=inst, tax_lots=[lot])
+
+        engine = TradingEngine(
+            data_provider=EmptyDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.advise([pos], [FakeAdvisor()])
+        assert len(results) == 1
+        assert results[0]["current_price"] == 0.0
