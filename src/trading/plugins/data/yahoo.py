@@ -101,8 +101,8 @@ class YahooFinanceProvider:
             bid=float(row.get("bid", 0)),
             ask=float(row.get("ask", 0)),
             last_price=float(row.get("lastPrice", 0)),
-            volume=int(row.get("volume", 0) or 0),
-            open_interest=int(row.get("openInterest", 0) or 0),
-            implied_volatility=float(row.get("impliedVolatility", 0)),
+            volume=int(row.get("volume", 0) or 0) if not pd.isna(row.get("volume")) else 0,
+            open_interest=int(row.get("openInterest", 0) or 0) if not pd.isna(row.get("openInterest")) else 0,
+            implied_volatility=float(row.get("impliedVolatility", 0)) if not pd.isna(row.get("impliedVolatility")) else 0.0,
             in_the_money=bool(row.get("inTheMoney", False)),
         )

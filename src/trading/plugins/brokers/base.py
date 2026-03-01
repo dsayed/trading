@@ -12,4 +12,10 @@ class Broker(Protocol):
     @property
     def name(self) -> str: ...
 
-    def present_order(self, order: Order, current_price: float) -> str: ...
+    def present_order(
+        self,
+        order: Order,
+        current_price: float,
+        conviction: float = 0.0,
+        strategy_name: str = "",
+    ) -> str: ...

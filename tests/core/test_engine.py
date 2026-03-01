@@ -93,7 +93,7 @@ class FakeBroker:
     def name(self) -> str:
         return "fake_broker"
 
-    def present_order(self, order, current_price) -> str:
+    def present_order(self, order, current_price, conviction=0.0, strategy_name="") -> str:
         return f"BUY {order.quantity} shares of {order.instrument.symbol}"
 
 
@@ -142,6 +142,113 @@ class TestTradingEngine:
         results = engine.scan(symbols=["AAPL"])
         assert len(results) == 1
         assert results[0]["signal"].instrument.symbol == "AAPL"
+
+
+class FakeStrategyLowConviction:
+    """Returns signals with lower conviction for ranking tests."""
+
+    @property
+    def name(self) -> str:
+        return "fake_low"
+
+    def generate_signals(self, instrument, bars) -> list[Signal]:
+        if len(bars) == 0:
+            return []
+        return [
+            Signal(
+                instrument=instrument,
+                direction=Direction.LONG,
+                conviction=0.30,
+                rationale="Low conviction signal",
+                strategy_name=self.name,
+                timestamp=datetime(2026, 2, 28),
+            )
+        ]
+
+
+class TestDiscover:
+    def test_discover_returns_ranked_results(self):
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy(), FakeStrategyLowConviction()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.discover(["AAPL", "MSFT"])
+        assert len(results) > 0
+        # Results should be sorted by conviction descending
+        convictions = [r["signal"].conviction for r in results]
+        assert convictions == sorted(convictions, reverse=True)
+
+    def test_discover_respects_max_results(self):
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy(), FakeStrategyLowConviction()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.discover(["AAPL", "MSFT", "GOOG"], max_results=2)
+        assert len(results) <= 2
+
+    def test_discover_filters_by_strategy_name(self):
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy(), FakeStrategyLowConviction()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.discover(
+            ["AAPL"], strategy_names=["fake_momentum"]
+        )
+        assert all(r["signal"].strategy_name == "fake_momentum" for r in results)
+
+    def test_discover_empty_symbols(self):
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.discover([])
+        assert results == []
+
+    def test_discover_forex_symbol(self):
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.discover(["EUR/USD"])
+        assert len(results) > 0
+        assert results[0]["signal"].instrument.asset_class == AssetClass.FOREX
+
+    def test_discover_with_empty_data(self):
+        engine = TradingEngine(
+            data_provider=EmptyDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.discover(["AAPL"])
+        assert results == []
+
+    def test_discover_unknown_strategy_name(self):
+        engine = TradingEngine(
+            data_provider=FakeDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.discover(["AAPL"], strategy_names=["nonexistent"])
+        assert results == []
 
 
 class FakeAdvisor:

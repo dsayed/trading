@@ -343,7 +343,27 @@ To stop either server, press `Ctrl+C` in its terminal window. This works the sam
 
 ## Running Again Later
 
-After the initial setup, you only need two commands to start (in separate terminals):
+### Quick start (recommended)
+
+The easiest way is to use the launcher script — it starts both servers in one terminal and `Ctrl+C` stops everything:
+
+macOS / Linux:
+```bash
+cd trading
+./start.sh
+```
+
+Windows (PowerShell):
+```powershell
+cd trading
+.\start.ps1
+```
+
+The script also auto-installs dependencies on first run, so you can hand it to someone who just cloned the repo.
+
+### Manual start (two terminals)
+
+If you prefer running the servers separately:
 
 **Terminal 1 — Backend:**
 

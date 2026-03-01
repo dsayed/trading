@@ -4,11 +4,17 @@ import type {
   AdviseResponse,
   Config,
   ConfigUpdate,
+  ImportCommitRequest,
+  ImportCommitResponse,
+  ImportPreviewResponse,
   Position,
   PositionCreate,
   ScanRequest,
   ScanResponse,
   ScanSummary,
+  ScannerRequest,
+  ScannerResponse,
+  UniverseResponse,
   Watchlist,
   WatchlistCreate,
   WatchlistUpdate,
@@ -66,4 +72,26 @@ export const api = {
   // Advise
   runAdvise: (data: AdviseRequest) =>
     request<AdviseResponse>('/advise', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Scanner
+  getUniverses: () => request<UniverseResponse>('/scanner/universes'),
+  runScanner: (data: ScannerRequest) =>
+    request<ScannerResponse>('/scanner/run', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Import
+  previewImport: async (file: File): Promise<ImportPreviewResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const resp = await fetch(`${BASE}/import/preview`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+      throw new Error(err.detail || 'Upload failed');
+    }
+    return resp.json();
+  },
+  commitImport: (data: ImportCommitRequest) =>
+    request<ImportCommitResponse>('/import/commit', { method: 'POST', body: JSON.stringify(data) }),
 };

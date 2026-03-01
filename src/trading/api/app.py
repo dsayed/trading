@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from trading.api.routers import advise, config, positions, scans, watchlists
+from trading.api.routers import advise, config, import_positions, positions, scanner, scans, watchlists
 
 
 def create_app() -> FastAPI:
@@ -18,6 +18,8 @@ def create_app() -> FastAPI:
     app.include_router(scans.router)
     app.include_router(positions.router)
     app.include_router(advise.router)
+    app.include_router(scanner.router)
+    app.include_router(import_positions.router)
 
     # Serve React build in production (if it exists)
     dashboard_dir = Path(__file__).resolve().parent.parent.parent.parent / "dashboard" / "dist"

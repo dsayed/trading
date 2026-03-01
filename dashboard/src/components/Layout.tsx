@@ -2,8 +2,10 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 const NAV_ITEMS = [
   { to: '/scan', label: 'Scan', icon: '⟐' },
+  { to: '/scanner', label: 'Scanner', icon: '◎' },
   { to: '/watchlists', label: 'Watchlists', icon: '☰' },
   { to: '/positions', label: 'Positions', icon: '◈' },
+  { to: '/import', label: 'Import', icon: '↑' },
   { to: '/plays', label: 'Plays', icon: '♟' },
   { to: '/history', label: 'History', icon: '↻' },
   { to: '/settings', label: 'Settings', icon: '⚙' },

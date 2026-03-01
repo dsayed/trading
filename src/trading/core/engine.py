@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
+from collections.abc import Callable
 from typing import Any
+
+ProgressCallback = Callable[[str], None] | None
 
 from trading.core.config import TradingConfig
 from trading.core.models import AssetClass, Instrument, Position
@@ -76,7 +79,12 @@ class TradingEngine:
                             continue
 
                         # Stage 4: Generate playbook
-                        playbook = self.broker.present_order(order, current_price)
+                        playbook = self.broker.present_order(
+                            order,
+                            current_price,
+                            conviction=signal.conviction,
+                            strategy_name=signal.strategy_name,
+                        )
 
                         results.append({
                             "signal": signal,
@@ -88,6 +96,104 @@ class TradingEngine:
                 continue
 
         return results
+
+    def discover(
+        self,
+        symbols: list[str],
+        strategy_names: list[str] | None = None,
+        lookback_days: int = 120,
+        max_results: int = 20,
+        on_progress: ProgressCallback = None,
+    ) -> list[dict[str, Any]]:
+        """Scan a large universe and return top signals ranked by conviction.
+
+        Unlike scan(), this method:
+        - Accepts a flat symbol list (caller resolves universe → symbols)
+        - Runs only specified strategies (or all registered ones)
+        - Sorts results by conviction descending, returns top N
+        - Handles forex symbols (containing '/')
+        """
+        if not symbols:
+            return []
+
+        # Filter strategies if specific names requested
+        active_strategies = self.strategies
+        if strategy_names:
+            active_strategies = [
+                s for s in self.strategies if s.name in strategy_names
+            ]
+        if not active_strategies:
+            return []
+
+        end = date.today()
+        start = end - timedelta(days=lookback_days)
+        results = []
+        total = len(symbols)
+
+        def _progress(msg: str) -> None:
+            logger.info(msg)
+            if on_progress:
+                on_progress(msg)
+
+        for idx, symbol in enumerate(symbols):
+            _progress(f"Scanning {symbol} ({idx + 1}/{total})")
+
+            # Detect asset class from symbol format
+            if "/" in symbol:
+                asset_class = AssetClass.FOREX
+            else:
+                asset_class = AssetClass.EQUITY
+
+            instrument = Instrument(symbol=symbol, asset_class=asset_class)
+
+            try:
+                bars = self.data_provider.fetch_bars(instrument, start, end)
+                if bars.empty:
+                    continue
+
+                for strategy in active_strategies:
+                    signals = strategy.generate_signals(instrument, bars)
+
+                    for signal in signals:
+                        current_price = float(bars["close"].iloc[-1])
+
+                        order = self.risk_manager.evaluate(
+                            signal=signal,
+                            current_price=current_price,
+                            positions=self.positions,
+                            cash=self.cash,
+                        )
+
+                        if order is None:
+                            continue
+
+                        playbook = self.broker.present_order(
+                            order,
+                            current_price,
+                            conviction=signal.conviction,
+                            strategy_name=signal.strategy_name,
+                        )
+
+                        results.append({
+                            "signal": signal,
+                            "order": order,
+                            "playbook": playbook,
+                        })
+                        direction = signal.direction.value
+                        _progress(
+                            f"  Signal: {direction} {symbol} "
+                            f"({signal.conviction:.0%} conviction, {strategy.name})"
+                        )
+            except Exception:
+                _progress(f"Failed to process {symbol}, skipping")
+                logger.debug("Error details for %s", symbol, exc_info=True)
+                continue
+
+        # Rank by conviction descending, return top N
+        results.sort(key=lambda r: r["signal"].conviction, reverse=True)
+        top = results[:max_results]
+        _progress(f"Done — {len(top)} signal{'s' if len(top) != 1 else ''} found from {total} symbols")
+        return top
 
     def advise(
         self,
