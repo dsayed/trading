@@ -26,7 +26,14 @@ class MeanReversionStrategy:
         rsi_oversold: float = 30.0,
         rsi_overbought: float = 70.0,
         bb_proximity_pct: float = 2.0,
+        short_window: int | None = None,
+        long_window: int | None = None,
     ) -> None:
+        # short_window/long_window map to bb_window and rsi_period for holding period presets
+        if short_window is not None:
+            rsi_period = short_window
+        if long_window is not None:
+            bb_window = long_window
         self.bb_window = bb_window
         self.bb_std = bb_std
         self.rsi_period = rsi_period

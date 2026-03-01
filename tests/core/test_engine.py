@@ -250,6 +250,56 @@ class TestDiscover:
         results = engine.discover(["AAPL"], strategy_names=["nonexistent"])
         assert results == []
 
+    def test_discover_reports_empty_bars_in_progress(self):
+        """Progress callback should report skipped symbols with no data."""
+        messages: list[str] = []
+        engine = TradingEngine(
+            data_provider=EmptyDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        engine.discover(["AAPL", "MSFT"], on_progress=messages.append)
+
+        skip_msgs = [m for m in messages if "Skipped" in m]
+        assert len(skip_msgs) == 2
+        assert "no bars from provider" in skip_msgs[0]
+        # Done message should include skip count
+        done_msg = [m for m in messages if m.startswith("Done")]
+        assert len(done_msg) == 1
+        assert "2 skipped (no data)" in done_msg[0]
+
+    def test_discover_reports_errors_in_progress(self):
+        """Progress callback should report error details for failed symbols."""
+
+        class ErrorDataProvider:
+            @property
+            def name(self) -> str:
+                return "error"
+
+            def fetch_bars(self, instrument, start, end):
+                raise ConnectionError("API timeout")
+
+        messages: list[str] = []
+        engine = TradingEngine(
+            data_provider=ErrorDataProvider(),
+            strategies=[FakeStrategy()],
+            risk_manager=FakeRiskManager(),
+            broker=FakeBroker(),
+            config=TradingConfig(),
+        )
+        results = engine.discover(["AAPL", "MSFT"], on_progress=messages.append)
+
+        assert results == []
+        error_msgs = [m for m in messages if "Error" in m]
+        assert len(error_msgs) == 2
+        assert "ConnectionError" in error_msgs[0]
+        assert "API timeout" in error_msgs[0]
+        # Done message should include error count
+        done_msg = [m for m in messages if m.startswith("Done")]
+        assert "2 failed" in done_msg[0]
+
 
 class FakeAdvisor:
     @property

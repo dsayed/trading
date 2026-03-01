@@ -14,6 +14,7 @@ export default function ConvictionBadge({ conviction }: Props) {
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${color}`}
+      title={`Conviction: ${pct}% \u2014 measures indicator agreement, not predicted return`}
     >
       {pct}%
     </span>

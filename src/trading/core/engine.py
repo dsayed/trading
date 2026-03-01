@@ -9,11 +9,21 @@ from typing import Any
 
 ProgressCallback = Callable[[str], None] | None
 
+import pandas as pd
+
 from trading.core.config import TradingConfig
 from trading.core.models import AssetClass, Instrument, Position
 from trading.plugins.data.base import OptionsDataProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_volume(bars: pd.DataFrame) -> pd.DataFrame:
+    """Ensure bars have a volume column — forex data often omits it."""
+    if "volume" not in bars.columns:
+        bars = bars.copy()
+        bars["volume"] = 0
+    return bars
 
 
 class TradingEngine:
@@ -59,6 +69,7 @@ class TradingEngine:
                 bars = self.data_provider.fetch_bars(instrument, start, end)
                 if bars.empty:
                     continue
+                bars = _ensure_volume(bars)
 
                 # Stage 2: Generate signals from all strategies
                 for strategy in self.strategies:
@@ -129,6 +140,8 @@ class TradingEngine:
         start = end - timedelta(days=lookback_days)
         results = []
         total = len(symbols)
+        skipped_empty = 0
+        skipped_error = 0
 
         def _progress(msg: str) -> None:
             logger.info(msg)
@@ -149,7 +162,10 @@ class TradingEngine:
             try:
                 bars = self.data_provider.fetch_bars(instrument, start, end)
                 if bars.empty:
+                    skipped_empty += 1
+                    _progress(f"Skipped {symbol}: no bars from provider")
                     continue
+                bars = _ensure_volume(bars)
 
                 for strategy in active_strategies:
                     signals = strategy.generate_signals(instrument, bars)
@@ -184,15 +200,24 @@ class TradingEngine:
                             f"  Signal: {direction} {symbol} "
                             f"({signal.conviction:.0%} conviction, {strategy.name})"
                         )
-            except Exception:
-                _progress(f"Failed to process {symbol}, skipping")
+            except Exception as exc:
+                skipped_error += 1
+                exc_type = type(exc).__name__
+                _progress(f"Error {symbol}: {exc_type}: {exc}")
                 logger.debug("Error details for %s", symbol, exc_info=True)
                 continue
 
         # Rank by conviction descending, return top N
         results.sort(key=lambda r: r["signal"].conviction, reverse=True)
         top = results[:max_results]
-        _progress(f"Done — {len(top)} signal{'s' if len(top) != 1 else ''} found from {total} symbols")
+
+        # Build informative done message
+        parts = [f"Done — {len(top)} signal{'s' if len(top) != 1 else ''} from {total} symbols"]
+        if skipped_empty:
+            parts.append(f"{skipped_empty} skipped (no data)")
+        if skipped_error:
+            parts.append(f"{skipped_error} failed")
+        _progress(", ".join(parts))
         return top
 
     def advise(

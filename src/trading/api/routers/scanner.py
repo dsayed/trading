@@ -9,7 +9,7 @@ from collections.abc import AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.responses import StreamingResponse
 
-from trading.api.dependencies import get_config_repo, get_scan_repo
+from trading.api.dependencies import get_config_repo, get_data_provider, get_scan_repo
 from trading.api.schemas import (
     ScannerRequest,
     ScannerResponse,
@@ -47,40 +47,24 @@ HOLDING_PERIOD_PRESETS: dict[str, dict[str, int]] = {
 
 
 def _build_engine_with_holding_period(
-    config: TradingConfig, holding_period: str | None,
+    config: TradingConfig,
+    holding_period: str | None,
+    data_provider: CachingDataProvider,
 ) -> TradingEngine:
-    """Build engine, optionally overriding strategy params for a holding period."""
+    """Build engine with shared data provider, optionally overriding strategy params."""
     if not holding_period or holding_period not in HOLDING_PERIOD_PRESETS:
-        return build_engine(config)
+        return build_engine(config, data_provider=data_provider)
 
     preset = HOLDING_PERIOD_PRESETS[holding_period]
-    # Build with overridden strategy params
-    from trading.plugins.data.cache import CachingDataProvider as _Caching
-    from trading.plugins.data.composite import CompositeDataProvider as _Composite
-    from trading.core.factory import _build_provider, DATA_PROVIDERS
 
-    bars_provider = _build_provider(config.data_provider, config)
-
-    if config.options_provider or config.discovery_provider or config.forex_provider:
-        from trading.plugins.data.base import OptionsDataProvider as _OptProto
-        options = _build_provider(config.options_provider, config) if config.options_provider else None
-        if options is None and isinstance(bars_provider, _OptProto):
-            options = bars_provider
-        discovery = _build_provider(config.discovery_provider, config) if config.discovery_provider else None
-        forex = _build_provider(config.forex_provider, config) if config.forex_provider else None
-        raw_provider = _Composite(bars_provider, options_provider=options, discovery_provider=discovery, forex_provider=forex)
-    else:
-        raw_provider = bars_provider
-
-    data_provider = _Caching(raw_provider)
+    import inspect
+    from trading.core.factory import BROKERS, RISK_MANAGERS
 
     strategies = []
     for name in config.strategies:
         cls = STRATEGIES.get(name)
         if not cls:
             continue
-        # Pass short_window/long_window/data_provider if the strategy accepts them
-        import inspect
         sig = inspect.signature(cls.__init__)
         kwargs: dict[str, object] = {}
         if "short_window" in sig.parameters:
@@ -91,7 +75,6 @@ def _build_engine_with_holding_period(
             kwargs["data_provider"] = data_provider
         strategies.append(cls(**kwargs))
 
-    from trading.core.factory import RISK_MANAGERS, BROKERS
     risk_manager = RISK_MANAGERS[config.risk_manager](
         stake=config.stake,
         max_position_pct=config.max_position_pct,
@@ -108,10 +91,24 @@ def _build_engine_with_holding_period(
     )
 
 
+def _compute_risk_reward(order) -> tuple[float | None, float | None, float | None]:
+    """Compute position_value, risk_amount, reward_amount from an order."""
+    entry = order.limit_price
+    stop = order.stop_price
+    qty = order.quantity
+    if entry and stop and qty:
+        position_value = round(qty * entry, 2)
+        risk_amount = round(qty * abs(entry - stop), 2)
+        reward_amount = risk_amount  # 1:1 R/R target
+        return position_value, risk_amount, reward_amount
+    return None, None, None
+
+
 def _result_to_signal(result: dict) -> SignalResponse:
     signal = result["signal"]
     order = result["order"]
     sym = signal.instrument.symbol
+    pos_val, risk, reward = _compute_risk_reward(order)
     return SignalResponse(
         symbol=sym,
         company_name=SYMBOL_NAMES.get(sym),
@@ -125,12 +122,17 @@ def _result_to_signal(result: dict) -> SignalResponse:
         stop_price=order.stop_price,
         order_rationale=order.rationale,
         playbook=result["playbook"],
+        position_value=pos_val,
+        risk_amount=risk,
+        reward_amount=reward,
     )
 
 
 def _results_to_serializable(results: list[dict]) -> list[dict]:
-    return [
-        {
+    serialized = []
+    for r in results:
+        pos_val, risk, reward = _compute_risk_reward(r["order"])
+        serialized.append({
             "symbol": r["signal"].instrument.symbol,
             "company_name": SYMBOL_NAMES.get(r["signal"].instrument.symbol),
             "direction": r["signal"].direction.value,
@@ -143,9 +145,11 @@ def _results_to_serializable(results: list[dict]) -> list[dict]:
             "stop_price": r["order"].stop_price,
             "order_rationale": r["order"].rationale,
             "playbook": r["playbook"],
-        }
-        for r in results
-    ]
+            "position_value": pos_val,
+            "risk_amount": risk,
+            "reward_amount": reward,
+        })
+    return serialized
 
 
 def _resolve_symbols(
@@ -233,9 +237,10 @@ async def run_scanner(
     body: ScannerRequest,
     config_repo: ConfigRepo = Depends(get_config_repo),
     scan_repo: ScanRepo = Depends(get_scan_repo),
+    shared_provider: CachingDataProvider = Depends(get_data_provider),
 ) -> ScannerResponse:
     config = config_repo.get()
-    engine = _build_engine_with_holding_period(config, body.holding_period)
+    engine = _build_engine_with_holding_period(config, body.holding_period, shared_provider)
     symbols, universe_label = _resolve_symbols(body, engine, config.data_provider)
 
     # Holding period can override lookback_days
@@ -273,10 +278,11 @@ async def run_scanner_stream(
     request: Request,
     config_repo: ConfigRepo = Depends(get_config_repo),
     scan_repo: ScanRepo = Depends(get_scan_repo),
+    shared_provider: CachingDataProvider = Depends(get_data_provider),
 ) -> StreamingResponse:
     """SSE endpoint — streams progress events then the final result."""
     config = config_repo.get()
-    engine = _build_engine_with_holding_period(config, body.holding_period)
+    engine = _build_engine_with_holding_period(config, body.holding_period, shared_provider)
     symbols, universe_label = _resolve_symbols(body, engine, config.data_provider)
 
     # Holding period can override lookback_days

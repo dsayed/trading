@@ -71,6 +71,7 @@ class ConfigRepo:
             polygon_api_key=row["polygon_api_key"],
             options_provider=row["options_provider"],
             discovery_provider=row["discovery_provider"],
+            forex_provider=row["forex_provider"],
             fmp_api_key=row["fmp_api_key"],
             marketdata_api_key=row["marketdata_api_key"],
             twelvedata_api_key=row["twelvedata_api_key"],
@@ -87,9 +88,10 @@ class ConfigRepo:
                 """INSERT INTO config (id, stake, max_position_pct, stop_loss_pct,
                    data_provider, strategies, risk_manager, broker,
                    polygon_api_key, options_provider, discovery_provider,
+                   forex_provider,
                    fmp_api_key, marketdata_api_key, twelvedata_api_key,
                    updated_at)
-                   VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                   VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
                    ON CONFLICT(id) DO UPDATE SET
                      stake=excluded.stake,
                      max_position_pct=excluded.max_position_pct,
@@ -101,6 +103,7 @@ class ConfigRepo:
                      polygon_api_key=excluded.polygon_api_key,
                      options_provider=excluded.options_provider,
                      discovery_provider=excluded.discovery_provider,
+                     forex_provider=excluded.forex_provider,
                      fmp_api_key=excluded.fmp_api_key,
                      marketdata_api_key=excluded.marketdata_api_key,
                      twelvedata_api_key=excluded.twelvedata_api_key,
@@ -116,6 +119,7 @@ class ConfigRepo:
                     new.polygon_api_key,
                     new.options_provider,
                     new.discovery_provider,
+                    new.forex_provider,
                     new.fmp_api_key,
                     new.marketdata_api_key,
                     new.twelvedata_api_key,

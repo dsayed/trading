@@ -44,7 +44,12 @@ class YahooFinanceProvider:
     def fetch_option_chain(
         self, instrument: Instrument, expiration: date | None = None
     ) -> list[OptionChain]:
-        """Fetch option chains for nearest 3 expirations (or a specific one)."""
+        """Fetch option chains for up to 4 expirations spanning near and mid-term.
+
+        Selects expirations useful for advisors: includes both near-term (< 20 DTE)
+        and mid-term (20-60 DTE) when available, so covered call and protective put
+        advisors can find candidates.
+        """
         ticker = yf.Ticker(instrument.symbol)
         available = ticker.options  # tuple of expiration date strings
         if not available:
@@ -53,7 +58,24 @@ class YahooFinanceProvider:
         if expiration is not None:
             exp_strings = [expiration.isoformat()]
         else:
-            exp_strings = list(available[:3])
+            # Pick expirations that cover the advisor sweet spots:
+            # - 1 nearest (for context)
+            # - up to 3 in the 20-60 DTE range (covered call / protective put zone)
+            today = date.today()
+            near: list[str] = []
+            mid: list[str] = []
+            for exp_str in available:
+                dte = (date.fromisoformat(exp_str) - today).days
+                if dte < 20:
+                    if not near:
+                        near.append(exp_str)
+                elif dte <= 90:
+                    mid.append(exp_str)
+                    if len(mid) >= 3:
+                        break
+            exp_strings = near + mid
+            if not exp_strings:
+                exp_strings = list(available[:3])
 
         chains: list[OptionChain] = []
         for exp_str in exp_strings:

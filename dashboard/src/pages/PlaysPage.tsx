@@ -3,6 +3,7 @@ import PlayCard from '../components/PlayCard';
 import { useRunAdvise } from '../hooks/useAdvise';
 import { usePositions } from '../hooks/usePositions';
 import type { AdviseResponse } from '../types/api';
+import { fmt, fmtInt } from '../utils/format';
 
 export default function PlaysPage() {
   const { data: positions, isLoading } = usePositions();
@@ -41,9 +42,15 @@ export default function PlaysPage() {
     return <div className="text-zinc-500">Loading...</div>;
   }
 
+  // Compute income summary from covered call plays
+  const coveredCallPlays = results?.positions.flatMap((pa) =>
+    pa.plays.filter((p) => p.play_type === 'covered_call' && p.premium > 0),
+  ) ?? [];
+  const totalMonthlyIncome = coveredCallPlays.reduce((sum, p) => sum + p.premium, 0);
+
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold text-zinc-100">Plays</h1>
+      <h1 className="mb-6 text-2xl font-semibold text-zinc-100">Options & Plays</h1>
 
       {/* Position selector */}
       {positions && positions.length > 0 ? (
@@ -71,7 +78,7 @@ export default function PlaysPage() {
                 }`}
               >
                 {pos.symbol}{' '}
-                <span className="text-xs opacity-70">({pos.total_quantity})</span>
+                <span className="text-xs opacity-70">({fmtInt(pos.total_quantity)})</span>
               </button>
             ))}
           </div>
@@ -104,6 +111,25 @@ export default function PlaysPage() {
         </div>
       )}
 
+      {/* Income summary */}
+      {results && !runAdvise.isPending && coveredCallPlays.length > 0 && (
+        <div className="mb-6 rounded-lg border border-blue-900/40 bg-blue-950/20 p-4">
+          <div className="flex items-center gap-4">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wider text-blue-400">
+                Estimated Monthly Income
+              </div>
+              <div className="text-2xl font-semibold text-blue-300">
+                {fmt(totalMonthlyIncome)}
+              </div>
+            </div>
+            <div className="text-xs text-blue-400/70">
+              from {coveredCallPlays.length} covered call{coveredCallPlays.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Results */}
       {results && !runAdvise.isPending && (
         <div className="space-y-6">
@@ -115,10 +141,10 @@ export default function PlaysPage() {
                   {posAdvice.symbol}
                 </h2>
                 <span className="text-sm text-zinc-400">
-                  {posAdvice.total_quantity} shares @ ${posAdvice.average_cost.toFixed(2)}
+                  {fmtInt(posAdvice.total_quantity)} shares @ {fmt(posAdvice.average_cost)}
                 </span>
                 <span className="text-sm text-zinc-500">
-                  Current: ${posAdvice.current_price.toFixed(2)}
+                  Current: {fmt(posAdvice.current_price)}
                 </span>
                 <span
                   className={`text-sm font-medium ${
@@ -127,8 +153,8 @@ export default function PlaysPage() {
                       : 'text-red-400'
                   }`}
                 >
-                  {posAdvice.unrealized_pnl >= 0 ? '+' : ''}$
-                  {posAdvice.unrealized_pnl.toFixed(2)}
+                  {posAdvice.unrealized_pnl >= 0 ? '+' : ''}
+                  {fmt(posAdvice.unrealized_pnl)}
                 </span>
               </div>
 

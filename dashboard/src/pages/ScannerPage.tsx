@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ConvictionBadge from '../components/ConvictionBadge';
 import PlaybookPanel from '../components/PlaybookPanel';
+import { useConfig, useUpdateConfig } from '../hooks/useConfig';
 import { useRunScannerStream } from '../hooks/useScanner';
 import { useUpdateWatchlist, useWatchlists } from '../hooks/useWatchlists';
 import { usePositions } from '../hooks/usePositions';
 import type { ScannerResponse, Signal } from '../types/api';
-import { fmtInt } from '../utils/format';
+import { fmt, fmtInt } from '../utils/format';
 
 const UNIVERSE_OPTIONS = [
   // Indices
@@ -73,11 +74,50 @@ const LOOKBACK_STEPS = [30, 60, 90, 120, 180, 365];
 
 const CONVICTION_INFO_KEY = 'scanner_conviction_info_dismissed';
 
+type SortCol = 'symbol' | 'conviction' | 'strategy' | 'quantity' | 'entry' | 'risk' | 'reward';
+type SortDir = 'asc' | 'desc';
+
+function sortSignals(signals: Signal[], col: SortCol, dir: SortDir): Signal[] {
+  const sorted = Array.from(signals);
+  const mult = dir === 'asc' ? 1 : -1;
+  sorted.sort((a, b) => {
+    let av: number | string;
+    let bv: number | string;
+    switch (col) {
+      case 'symbol':
+        return mult * a.symbol.localeCompare(b.symbol);
+      case 'conviction':
+        return mult * (a.conviction - b.conviction);
+      case 'strategy':
+        return mult * a.strategy_name.localeCompare(b.strategy_name);
+      case 'quantity':
+        return mult * (a.quantity - b.quantity);
+      case 'entry':
+        av = a.limit_price ?? 0;
+        bv = b.limit_price ?? 0;
+        return mult * ((av as number) - (bv as number));
+      case 'risk':
+        av = a.risk_amount ?? 0;
+        bv = b.risk_amount ?? 0;
+        return mult * ((av as number) - (bv as number));
+      case 'reward':
+        av = a.reward_amount ?? 0;
+        bv = b.reward_amount ?? 0;
+        return mult * ((av as number) - (bv as number));
+      default:
+        return 0;
+    }
+  });
+  return sorted;
+}
+
 export default function ScannerPage() {
   const runScanner = useRunScannerStream();
   const { data: watchlists } = useWatchlists();
   const updateWatchlist = useUpdateWatchlist();
   const { data: positions } = usePositions();
+  const { data: config } = useConfig();
+  const updateConfig = useUpdateConfig();
 
   const [universe, setUniverse] = useState('sp500');
   const [customSymbols, setCustomSymbols] = useState('');
@@ -101,10 +141,59 @@ export default function ScannerPage() {
   );
   const logRef = useRef<HTMLDivElement>(null);
 
+  // Sort state
+  const [sortCol, setSortCol] = useState<SortCol>('conviction');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  // Position modeler state — initialized from config
+  const [stake, setStake] = useState<number | null>(null);
+  const [maxPositionPct, setMaxPositionPct] = useState<number | null>(null);
+  const [stopLossPct, setStopLossPct] = useState<number | null>(null);
+  const [modelerOpen, setModelerOpen] = useState(false);
+
+  useEffect(() => {
+    if (config && stake === null) {
+      setStake(config.stake);
+      setMaxPositionPct(Math.round(config.max_position_pct * 100));
+      setStopLossPct(Math.round(config.stop_loss_pct * 100));
+    }
+  }, [config, stake]);
+
+  function toggleSort(col: SortCol) {
+    if (sortCol === col) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortCol(col);
+      setSortDir(col === 'symbol' || col === 'strategy' ? 'asc' : 'desc');
+    }
+  }
+
+  function SortHeader({ col, label, className }: { col: SortCol; label: string; className?: string }) {
+    const active = sortCol === col;
+    const arrow = active ? (sortDir === 'asc' ? ' \u25B2' : ' \u25BC') : '';
+    return (
+      <th
+        className={`px-4 py-3 cursor-pointer select-none transition-colors hover:text-zinc-300 ${active ? 'text-zinc-300' : ''} ${className ?? ''}`}
+        onClick={() => toggleSort(col)}
+      >
+        {label}{arrow}
+      </th>
+    );
+  }
+
   function toggleStrategy(name: string) {
     setSelectedStrategies((prev) =>
       prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name],
     );
+  }
+
+  function handleModelerSave() {
+    if (stake == null || maxPositionPct == null || stopLossPct == null) return;
+    updateConfig.mutate({
+      stake,
+      max_position_pct: maxPositionPct / 100,
+      stop_loss_pct: stopLossPct / 100,
+    });
   }
 
   function handleScan() {
@@ -164,10 +253,13 @@ export default function ScannerPage() {
     (s) => Math.round(s.conviction * 100) >= minConviction,
   );
 
+  // Apply sorting
+  const sortedSignals = filteredSignals ? sortSignals(filteredSignals, sortCol, sortDir) : undefined;
+
   // Check if user has positions matching any scanner results
   const ownedSymbols = positions?.map((p) => p.symbol) ?? [];
   const ownedInResults =
-    filteredSignals?.filter((s) => ownedSymbols.includes(s.symbol)) ?? [];
+    sortedSignals?.filter((s) => ownedSymbols.includes(s.symbol)) ?? [];
 
   return (
     <div>
@@ -193,6 +285,73 @@ export default function ScannerPage() {
 
       {/* Controls */}
       <div className="mb-6 space-y-4 rounded-lg border border-zinc-800 p-4">
+        {/* Position Sizing Modeler */}
+        <details
+          open={modelerOpen}
+          onToggle={(e) => setModelerOpen((e.target as HTMLDetailsElement).open)}
+        >
+          <summary className="cursor-pointer text-sm font-medium text-zinc-400 hover:text-zinc-300">
+            Position Sizing
+            {stake != null && (
+              <span className="ml-2 font-normal text-zinc-600">
+                {fmt(stake)} stake &middot; {maxPositionPct}% max &middot; {stopLossPct}% stop
+              </span>
+            )}
+          </summary>
+          <div className="mt-3 flex flex-wrap items-end gap-4">
+            <div className="w-40">
+              <label className="mb-1 block text-xs font-medium text-zinc-500">Stake ($)</label>
+              <input
+                type="number"
+                value={stake ?? ''}
+                onChange={(e) => setStake(Number(e.target.value))}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-200 outline-none focus:border-emerald-500/50"
+              />
+              <p className="mt-0.5 text-xs text-zinc-600">Total capital to deploy</p>
+            </div>
+            <div className="w-40">
+              <label className="mb-1 block text-xs font-medium text-zinc-500">
+                Max Position: {maxPositionPct ?? 0}%
+              </label>
+              <input
+                type="range"
+                min={5}
+                max={100}
+                step={5}
+                value={maxPositionPct ?? 10}
+                onChange={(e) => setMaxPositionPct(Number(e.target.value))}
+                className="w-full accent-emerald-500"
+              />
+              <p className="mt-0.5 text-xs text-zinc-600">Max % of stake per position</p>
+            </div>
+            <div className="w-40">
+              <label className="mb-1 block text-xs font-medium text-zinc-500">
+                Stop Loss: {stopLossPct ?? 0}%
+              </label>
+              <input
+                type="range"
+                min={1}
+                max={20}
+                step={1}
+                value={stopLossPct ?? 5}
+                onChange={(e) => setStopLossPct(Number(e.target.value))}
+                className="w-full accent-emerald-500"
+              />
+              <p className="mt-0.5 text-xs text-zinc-600">Stop distance from entry</p>
+            </div>
+            <button
+              onClick={handleModelerSave}
+              disabled={updateConfig.isPending}
+              className="rounded-md bg-zinc-700 px-4 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-600 disabled:opacity-50"
+            >
+              {updateConfig.isPending ? 'Saving...' : 'Apply'}
+            </button>
+            {updateConfig.isSuccess && (
+              <span className="text-xs text-emerald-400">Saved</span>
+            )}
+          </div>
+        </details>
+
         {/* Holding period toggle */}
         <div>
           <label className="mb-2 block text-sm font-medium text-zinc-400">Holding Period</label>
@@ -458,7 +617,7 @@ export default function ScannerPage() {
         <div className="space-y-4">
           <div className="flex items-center gap-3 text-sm text-zinc-500">
             <span>
-              {filteredSignals?.length ?? 0} signal{(filteredSignals?.length ?? 0) !== 1 ? 's' : ''}{' '}
+              {sortedSignals?.length ?? 0} signal{(sortedSignals?.length ?? 0) !== 1 ? 's' : ''}{' '}
               {minConviction > 0 && `(${lastResult.signal_count} total, filtered to ${minConviction}%+)`}
             </span>
             {lastResult.universe && (
@@ -473,27 +632,30 @@ export default function ScannerPage() {
 
           {selectedSignal ? (
             <PlaybookPanel signal={selectedSignal} onClose={() => setSelectedSignal(null)} />
-          ) : !filteredSignals || filteredSignals.length === 0 ? (
+          ) : !sortedSignals || sortedSignals.length === 0 ? (
             <div className="rounded-lg border border-zinc-800 p-12 text-center text-zinc-500">
               No actionable signals found.
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-zinc-800">
+            <div className="overflow-x-auto rounded-lg border border-zinc-800">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-zinc-800 bg-zinc-900/50 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                     <th className="px-4 py-3 w-12">#</th>
                     <th className="px-4 py-3">Action</th>
-                    <th className="px-4 py-3">Symbol</th>
-                    <th className="px-4 py-3">Conviction</th>
-                    <th className="px-4 py-3">Qty</th>
-                    <th className="px-4 py-3">Strategy</th>
+                    <SortHeader col="symbol" label="Symbol" />
+                    <SortHeader col="conviction" label="Conviction" />
+                    <SortHeader col="entry" label="Entry" />
+                    <SortHeader col="risk" label="Risk" />
+                    <SortHeader col="reward" label="Reward" />
+                    <SortHeader col="quantity" label="Qty" />
+                    <SortHeader col="strategy" label="Strategy" />
                     <th className="px-4 py-3">Summary</th>
                     <th className="px-4 py-3 w-24"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
-                  {filteredSignals.map((s, i) => {
+                  {sortedSignals.map((s, i) => {
                     const dirLabel =
                       s.direction === 'long'
                         ? 'Buy'
@@ -524,6 +686,15 @@ export default function ScannerPage() {
                         </td>
                         <td className="px-4 py-3">
                           <ConvictionBadge conviction={s.conviction} />
+                        </td>
+                        <td className="px-4 py-3 font-mono text-zinc-300">
+                          {s.limit_price != null ? fmt(s.limit_price) : '\u2014'}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-red-400">
+                          {s.risk_amount != null ? fmt(s.risk_amount) : '\u2014'}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-emerald-400">
+                          {s.reward_amount != null ? fmt(s.reward_amount) : '\u2014'}
                         </td>
                         <td className="px-4 py-3 text-zinc-300">{fmtInt(s.quantity)}</td>
                         <td className="px-4 py-3 text-zinc-400">{s.strategy_name}</td>

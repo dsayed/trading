@@ -22,6 +22,7 @@ class ConfigResponse(BaseModel):
     polygon_api_key_hint: str = ""
     options_provider: str | None = None
     discovery_provider: str | None = None
+    forex_provider: str | None = None
     fmp_api_key_set: bool = False
     fmp_api_key_hint: str = ""
     marketdata_api_key_set: bool = False
@@ -38,6 +39,7 @@ class ConfigUpdateRequest(BaseModel):
     polygon_api_key: str | None = None
     options_provider: str | None = None
     discovery_provider: str | None = None
+    forex_provider: str | None = None
     fmp_api_key: str | None = None
     marketdata_api_key: str | None = None
     twelvedata_api_key: str | None = None
@@ -79,6 +81,7 @@ class ScanRequest(BaseModel):
 
 class SignalResponse(BaseModel):
     symbol: str
+    company_name: str | None = None
     direction: str
     conviction: float
     rationale: str
@@ -89,6 +92,9 @@ class SignalResponse(BaseModel):
     stop_price: float | None
     order_rationale: str
     playbook: str
+    position_value: float | None = None
+    risk_amount: float | None = None
+    reward_amount: float | None = None
 
 
 class ScanResponse(BaseModel):
@@ -216,6 +222,7 @@ class ScannerRequest(BaseModel):
     strategies: list[str] | None = None
     max_results: int = 20
     lookback_days: int = 120
+    holding_period: str | None = None
 
 
 class UniverseResponse(BaseModel):

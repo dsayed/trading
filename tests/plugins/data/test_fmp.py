@@ -78,14 +78,12 @@ class TestProtocolConformance:
 class TestFetchBars:
     def test_returns_ohlcv_dataframe(self):
         session = FakeSession()
-        session.responses["historical-price-full"] = FakeResponse({
-            "symbol": "AAPL",
-            "historical": [
-                {"date": "2024-01-01", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000000},
-                {"date": "2024-01-02", "open": 103, "high": 107, "low": 102, "close": 106, "volume": 1200000},
-                {"date": "2024-01-03", "open": 106, "high": 108, "low": 104, "close": 107.5, "volume": 900000},
-            ],
-        })
+        # Stable endpoint returns a flat list of bar objects
+        session.responses["historical-price-eod"] = FakeResponse([
+            {"date": "2024-01-01", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000000},
+            {"date": "2024-01-02", "open": 103, "high": 107, "low": 102, "close": 106, "volume": 1200000},
+            {"date": "2024-01-03", "open": 106, "high": 108, "low": 104, "close": 107.5, "volume": 900000},
+        ])
         provider = _make_provider(session)
         inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
 
@@ -97,7 +95,7 @@ class TestFetchBars:
 
     def test_empty_when_no_data(self):
         session = FakeSession()
-        session.responses["historical-price-full"] = FakeResponse({"historical": []})
+        session.responses["historical-price-eod"] = FakeResponse([])
         provider = _make_provider(session)
         inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
 
@@ -106,16 +104,27 @@ class TestFetchBars:
         assert df.empty
         assert list(df.columns) == ["open", "high", "low", "close", "volume"]
 
-    def test_passes_date_params(self):
+    def test_passes_symbol_as_param(self):
         session = FakeSession()
-        session.responses["historical-price-full"] = FakeResponse({"historical": []})
+        session.responses["historical-price-eod"] = FakeResponse([])
         provider = _make_provider(session)
         inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
 
         provider.fetch_bars(inst, date(2024, 1, 1), date(2024, 6, 15))
 
+        assert session.last_params["symbol"] == "AAPL"
         assert session.last_params["from"] == "2024-01-01"
         assert session.last_params["to"] == "2024-06-15"
+
+    def test_uses_stable_endpoint(self):
+        session = FakeSession()
+        session.responses["historical-price-eod"] = FakeResponse([])
+        provider = _make_provider(session)
+        inst = Instrument(symbol="AAPL", asset_class=AssetClass.EQUITY)
+
+        provider.fetch_bars(inst, date(2024, 1, 1), date(2024, 1, 3))
+
+        assert "/stable/historical-price-eod/full" in session.last_url
 
 
 # ── list_universe ─────────────────────────────────────────────────────
@@ -130,27 +139,24 @@ class TestListUniverse:
         assert "EUR/USD" in symbols
         assert len(symbols) == 7
 
-    def test_sp500_uses_api(self):
-        session = FakeSession()
-        session.responses["sp500_constituent"] = FakeResponse([
-            {"symbol": "AAPL"}, {"symbol": "MSFT"}, {"symbol": "GOOG"},
-        ])
-        provider = _make_provider(session)
+    def test_sp500_returns_hardcoded_list(self):
+        provider = _make_provider(FakeSession())
 
         symbols = provider.list_universe("sp500")
 
-        assert symbols == ["AAPL", "MSFT", "GOOG"]
+        assert len(symbols) > 400
+        assert "AAPL" in symbols
+        assert "MSFT" in symbols
+        assert "GOOG" in symbols
 
-    def test_nasdaq100_uses_api(self):
-        session = FakeSession()
-        session.responses["nasdaq_constituent"] = FakeResponse([
-            {"symbol": "NVDA"}, {"symbol": "META"},
-        ])
-        provider = _make_provider(session)
+    def test_nasdaq100_returns_hardcoded_list(self):
+        provider = _make_provider(FakeSession())
 
         symbols = provider.list_universe("nasdaq100")
 
-        assert symbols == ["NVDA", "META"]
+        assert len(symbols) > 90
+        assert "NVDA" in symbols
+        assert "META" in symbols
 
     def test_unknown_universe_returns_empty(self):
         provider = _make_provider(FakeSession())
@@ -164,43 +170,17 @@ class TestListUniverse:
 
 
 class TestGetMovers:
-    def test_returns_movers(self):
-        session = FakeSession()
-        session.responses["gainers"] = FakeResponse([
-            {"symbol": "AAPL", "changesPercentage": 5.2, "price": 190.50, "volume": 123456},
-            {"symbol": "TSLA", "changesPercentage": 3.1, "price": 250.00, "volume": 654321},
-        ])
-        provider = _make_provider(session)
+    def test_returns_empty_on_free_tier(self):
+        provider = _make_provider(FakeSession())
 
         movers = provider.get_movers("gainers", limit=10)
 
-        assert len(movers) == 2
-        assert movers[0]["symbol"] == "AAPL"
-        assert movers[0]["change_pct"] == 5.2
-        assert movers[0]["price"] == 190.50
+        assert movers == []
 
-    def test_respects_limit(self):
-        session = FakeSession()
-        session.responses["gainers"] = FakeResponse([
-            {"symbol": f"SYM{i}", "changesPercentage": float(i), "price": float(i * 10), "volume": i * 1000}
-            for i in range(30)
-        ])
-        provider = _make_provider(session)
+    def test_returns_empty_for_losers(self):
+        provider = _make_provider(FakeSession())
 
-        movers = provider.get_movers("gainers", limit=5)
-
-        assert len(movers) == 5
-
-    def test_empty_on_error(self):
-        session = FakeSession()
-
-        def raise_error(*args, **kwargs):
-            raise Exception("API error")
-
-        session.get = raise_error
-        provider = _make_provider(session)
-
-        movers = provider.get_movers("gainers")
+        movers = provider.get_movers("losers")
 
         assert movers == []
 

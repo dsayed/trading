@@ -21,7 +21,7 @@ export default function App() {
         <Route path="/plays" element={<PlaysPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/scan" replace />} />
+        <Route path="*" element={<Navigate to="/scanner" replace />} />
       </Route>
     </Routes>
   );

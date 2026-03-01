@@ -23,6 +23,7 @@ class TradingConfig(BaseModel):
     polygon_api_key: str | None = None
     options_provider: str | None = None
     discovery_provider: str | None = None
+    forex_provider: str | None = None
     fmp_api_key: str | None = None
     marketdata_api_key: str | None = None
     twelvedata_api_key: str | None = None

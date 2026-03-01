@@ -15,6 +15,7 @@ from datetime import date
 import pandas as pd
 
 from trading.core.models import Instrument, OptionChain, OptionContract
+from trading.plugins.data.base import log_api_call
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ class TwelveDataProvider:
         """Fetch daily OHLCV bars via Twelve Data time_series endpoint."""
         try:
             self._throttle()
+            t0 = time.monotonic()
             ts = self._client.time_series(
                 symbol=instrument.symbol,
                 interval="1day",
@@ -73,7 +75,11 @@ class TwelveDataProvider:
                 outputsize=5000,
             )
             df = ts.as_pandas()
-        except Exception:
+            elapsed = (time.monotonic() - t0) * 1000
+            log_api_call("twelvedata", "SDK", f"time_series({instrument.symbol})", elapsed)
+        except Exception as exc:
+            elapsed = (time.monotonic() - t0) * 1000
+            log_api_call("twelvedata", "SDK", f"time_series({instrument.symbol})", elapsed, "error", str(exc))
             logger.warning(
                 "Failed to fetch bars for %s", instrument.symbol, exc_info=True
             )

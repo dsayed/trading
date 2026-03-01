@@ -27,10 +27,12 @@ class CompositeDataProvider:
         bars_provider: Any,
         options_provider: Any | None = None,
         discovery_provider: Any | None = None,
+        forex_provider: Any | None = None,
     ) -> None:
         self._bars_provider = bars_provider
         self._options_provider = options_provider
         self._discovery_provider = discovery_provider
+        self._forex_provider = forex_provider
 
     @property
     def name(self) -> str:
@@ -39,6 +41,8 @@ class CompositeDataProvider:
             parts.append(self._options_provider.name)
         if self._discovery_provider and self._discovery_provider is not self._bars_provider:
             parts.append(self._discovery_provider.name)
+        if self._forex_provider and self._forex_provider is not self._bars_provider:
+            parts.append(self._forex_provider.name)
         return "+".join(dict.fromkeys(parts))  # deduplicated, ordered
 
     @property
@@ -51,9 +55,16 @@ class CompositeDataProvider:
 
     # ── DataProvider ──────────────────────────────────────────────────
 
+    @property
+    def supports_forex(self) -> bool:
+        return self._forex_provider is not None
+
     def fetch_bars(
         self, instrument: Instrument, start: date, end: date
     ) -> pd.DataFrame:
+        # Route forex instruments to the forex provider if configured
+        if self._forex_provider and "/" in instrument.symbol:
+            return self._forex_provider.fetch_bars(instrument, start, end)
         return self._bars_provider.fetch_bars(instrument, start, end)
 
     # ── OptionsDataProvider ───────────────────────────────────────────

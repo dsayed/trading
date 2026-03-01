@@ -2,12 +2,30 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Protocol, runtime_checkable
 
 import pandas as pd
 
 from trading.core.models import Instrument, OptionChain
+
+_api_logger = logging.getLogger("trading.api_calls")
+
+
+def log_api_call(
+    provider: str,
+    method: str,
+    url: str,
+    elapsed_ms: float,
+    status: str = "ok",
+    error: str | None = None,
+) -> None:
+    """Log an API call with timing for diagnostics."""
+    msg = f"{provider} {method} {url} {elapsed_ms:.0f}ms {status}"
+    if error:
+        msg += f" ({error})"
+    _api_logger.info(msg)
 
 
 @runtime_checkable

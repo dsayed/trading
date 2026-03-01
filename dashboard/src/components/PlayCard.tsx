@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Play } from '../types/api';
+import { fmt } from '../utils/format';
 
 const TYPE_COLORS: Record<string, string> = {
   covered_call: 'bg-blue-900/50 text-blue-300 border-blue-800',
@@ -57,13 +58,13 @@ export default function PlayCard({ play }: { play: Play }) {
         {play.option_contract && (
           <>
             <span className="text-zinc-500">
-              Strike: <span className="text-zinc-300">${play.option_contract.strike}</span>
+              Strike: <span className="text-zinc-300">{fmt(play.option_contract.strike)}</span>
             </span>
             <span className="text-zinc-500">
               Exp: <span className="text-zinc-300">{play.option_contract.expiration}</span>
             </span>
             <span className="text-zinc-500">
-              Mid: <span className="text-zinc-300">${play.option_contract.mid_price.toFixed(2)}</span>
+              Mid: <span className="text-zinc-300">{fmt(play.option_contract.mid_price)}</span>
             </span>
           </>
         )}
@@ -74,22 +75,22 @@ export default function PlayCard({ play }: { play: Play }) {
         )}
         {play.premium > 0 && (
           <span className="text-zinc-500">
-            Premium: <span className="text-zinc-300">${play.premium.toFixed(2)}</span>
+            Premium: <span className="text-zinc-300">{fmt(play.premium)}</span>
           </span>
         )}
         {play.max_profit != null && (
           <span className="text-zinc-500">
-            Max Profit: <span className="text-emerald-400">${play.max_profit.toFixed(2)}</span>
+            Max Profit: <span className="text-emerald-400">{fmt(play.max_profit)}</span>
           </span>
         )}
         {play.max_loss != null && (
           <span className="text-zinc-500">
-            Max Loss: <span className="text-red-400">${play.max_loss.toFixed(2)}</span>
+            Max Loss: <span className="text-red-400">{fmt(play.max_loss)}</span>
           </span>
         )}
         {play.breakeven != null && (
           <span className="text-zinc-500">
-            Breakeven: <span className="text-zinc-300">${play.breakeven.toFixed(2)}</span>
+            Breakeven: <span className="text-zinc-300">{fmt(play.breakeven)}</span>
           </span>
         )}
       </div>
@@ -106,7 +107,7 @@ export default function PlayCard({ play }: { play: Play }) {
         onClick={() => setExpanded(!expanded)}
         className="text-xs text-emerald-400 hover:text-emerald-300"
       >
-        {expanded ? 'Hide playbook ▴' : 'Show playbook ▾'}
+        {expanded ? 'Hide playbook \u25b4' : 'Show playbook \u25be'}
       </button>
       {expanded && (
         <pre className="mt-2 whitespace-pre-wrap rounded-md bg-zinc-900 p-3 text-xs text-zinc-300">

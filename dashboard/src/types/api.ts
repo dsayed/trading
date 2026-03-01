@@ -10,6 +10,7 @@ export interface Config {
   polygon_api_key_hint: string;
   options_provider: string | null;
   discovery_provider: string | null;
+  forex_provider: string | null;
   fmp_api_key_set: boolean;
   fmp_api_key_hint: string;
   marketdata_api_key_set: boolean;
@@ -26,6 +27,7 @@ export interface ConfigUpdate {
   polygon_api_key?: string;
   options_provider?: string | null;
   discovery_provider?: string | null;
+  forex_provider?: string | null;
   fmp_api_key?: string;
   marketdata_api_key?: string;
   twelvedata_api_key?: string;
@@ -51,6 +53,7 @@ export interface WatchlistUpdate {
 
 export interface Signal {
   symbol: string;
+  company_name: string | null;
   direction: string;
   conviction: number;
   rationale: string;
@@ -61,6 +64,9 @@ export interface Signal {
   stop_price: number | null;
   order_rationale: string;
   playbook: string;
+  position_value: number | null;
+  risk_amount: number | null;
+  reward_amount: number | null;
 }
 
 export interface ScanRequest {
@@ -178,6 +184,7 @@ export interface ScannerRequest {
   strategies?: string[];
   max_results?: number;
   lookback_days?: number;
+  holding_period?: string;
 }
 
 export interface UniverseResponse {
@@ -191,6 +198,20 @@ export interface ScannerResponse {
   signal_count: number;
   universe: string | null;
   signals: Signal[];
+}
+
+// Diagnostics
+export interface ProviderStatus {
+  name: string;
+  role: string;
+  ok: boolean;
+  latency_ms: number;
+  bars_returned: number;
+  error: string | null;
+}
+
+export interface DiagnosticsResponse {
+  providers: ProviderStatus[];
 }
 
 // Import

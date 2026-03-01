@@ -4,6 +4,7 @@ import type {
   AdviseResponse,
   Config,
   ConfigUpdate,
+  DiagnosticsResponse,
   ImportCommitRequest,
   ImportCommitResponse,
   ImportPreviewResponse,
@@ -77,6 +78,10 @@ export const api = {
   getUniverses: () => request<UniverseResponse>('/scanner/universes'),
   runScanner: (data: ScannerRequest) =>
     request<ScannerResponse>('/scanner/run', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Diagnostics
+  getHealth: () => request<{ status: string }>('/diagnostics/health'),
+  getDiagnostics: () => request<DiagnosticsResponse>('/diagnostics/providers'),
 
   // Import
   previewImport: async (file: File): Promise<ImportPreviewResponse> => {

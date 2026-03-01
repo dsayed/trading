@@ -24,7 +24,14 @@ class IncomeStrategy:
         atr_period: int = 14,
         atr_high_pct: float = 3.0,
         vol_lookback: int = 60,
+        short_window: int | None = None,
+        long_window: int | None = None,
     ) -> None:
+        # short_window maps to atr_period, long_window maps to vol_lookback
+        if short_window is not None:
+            atr_period = short_window
+        if long_window is not None:
+            vol_lookback = long_window
         self.atr_period = atr_period
         self.atr_high_pct = atr_high_pct
         self.vol_lookback = vol_lookback

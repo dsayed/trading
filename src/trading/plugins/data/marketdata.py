@@ -16,6 +16,7 @@ import pandas as pd
 import requests
 
 from trading.core.models import Instrument, OptionChain, OptionContract
+from trading.plugins.data.base import log_api_call
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +61,17 @@ class MarketDataProvider:
         """Make an authenticated GET request to MarketData.app API."""
         self._throttle()
         url = f"{BASE_URL}{path}"
-        resp = self._session.get(url, params=params or {}, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
+        t0 = time.monotonic()
+        try:
+            resp = self._session.get(url, params=params or {}, timeout=30)
+            resp.raise_for_status()
+            elapsed = (time.monotonic() - t0) * 1000
+            log_api_call("marketdata", "GET", path, elapsed)
+            return resp.json()
+        except Exception as exc:
+            elapsed = (time.monotonic() - t0) * 1000
+            log_api_call("marketdata", "GET", path, elapsed, "error", str(exc))
+            raise
 
     @property
     def name(self) -> str:

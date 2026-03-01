@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS config (
     polygon_api_key TEXT,
     options_provider TEXT,
     discovery_provider TEXT,
+    forex_provider TEXT,
     fmp_api_key TEXT,
     marketdata_api_key TEXT,
     twelvedata_api_key TEXT,
@@ -99,7 +100,7 @@ class Database:
         if "polygon_api_key" not in columns:
             conn.execute("ALTER TABLE config ADD COLUMN polygon_api_key TEXT")
         for col in (
-            "options_provider", "discovery_provider",
+            "options_provider", "discovery_provider", "forex_provider",
             "fmp_api_key", "marketdata_api_key", "twelvedata_api_key",
         ):
             if col not in columns:

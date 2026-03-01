@@ -67,41 +67,46 @@ def _build_provider(name: str, config: TradingConfig) -> Any:
     return cls()
 
 
-def build_engine(config: TradingConfig) -> TradingEngine:
-    """Build a TradingEngine from config, resolving plugin names to implementations."""
-    bars_provider = _build_provider(config.data_provider, config)
+def build_engine(
+    config: TradingConfig,
+    data_provider: CachingDataProvider | None = None,
+) -> TradingEngine:
+    """Build a TradingEngine from config, resolving plugin names to implementations.
 
-    # Build composite if role overrides are configured
-    if config.options_provider or config.discovery_provider or config.forex_provider:
-        options = (
-            _build_provider(config.options_provider, config)
-            if config.options_provider
-            else None
-        )
-        # If no explicit options override, and the bars provider supports options,
-        # reuse it so options aren't silently lost when building a composite.
-        if options is None and isinstance(bars_provider, OptionsDataProvider):
-            options = bars_provider
-        discovery = (
-            _build_provider(config.discovery_provider, config)
-            if config.discovery_provider
-            else None
-        )
-        forex = (
-            _build_provider(config.forex_provider, config)
-            if config.forex_provider
-            else None
-        )
-        raw_provider = CompositeDataProvider(
-            bars_provider,
-            options_provider=options,
-            discovery_provider=discovery,
-            forex_provider=forex,
-        )
-    else:
-        raw_provider = bars_provider
+    If data_provider is given, reuse it (shared cache across requests).
+    Otherwise build a fresh one (CLI usage).
+    """
+    if data_provider is None:
+        bars_provider = _build_provider(config.data_provider, config)
 
-    data_provider = CachingDataProvider(raw_provider)
+        if config.options_provider or config.discovery_provider or config.forex_provider:
+            options = (
+                _build_provider(config.options_provider, config)
+                if config.options_provider
+                else None
+            )
+            if options is None and isinstance(bars_provider, OptionsDataProvider):
+                options = bars_provider
+            discovery = (
+                _build_provider(config.discovery_provider, config)
+                if config.discovery_provider
+                else None
+            )
+            forex = (
+                _build_provider(config.forex_provider, config)
+                if config.forex_provider
+                else None
+            )
+            raw_provider = CompositeDataProvider(
+                bars_provider,
+                options_provider=options,
+                discovery_provider=discovery,
+                forex_provider=forex,
+            )
+        else:
+            raw_provider = bars_provider
+
+        data_provider = CachingDataProvider(raw_provider)
 
     strategies = []
     for name in config.strategies:

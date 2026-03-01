@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Signal } from '../types/api';
+import { fmt, fmtInt } from '../utils/format';
 import ConvictionBadge from './ConvictionBadge';
 
 interface Props {
@@ -37,6 +38,9 @@ export default function PlaybookPanel({ signal, onClose }: Props) {
           <span className={`text-lg font-bold ${dirTextColor}`}>
             {dirLabel} {signal.symbol}
           </span>
+          {signal.company_name && (
+            <span className="text-sm text-zinc-500">{signal.company_name}</span>
+          )}
           <ConvictionBadge conviction={signal.conviction} />
           <span className="text-sm text-zinc-500">
             {STRATEGY_LABELS[signal.strategy_name] ?? signal.strategy_name}
@@ -55,19 +59,19 @@ export default function PlaybookPanel({ signal, onClose }: Props) {
         <div className="rounded-md bg-zinc-900/50 p-3">
           <div className="text-xs text-zinc-500">Shares</div>
           <div className="text-lg font-semibold text-zinc-200">
-            {signal.quantity}
+            {fmtInt(signal.quantity)}
           </div>
         </div>
         <div className="rounded-md bg-zinc-900/50 p-3">
           <div className="text-xs text-zinc-500">Price</div>
           <div className="font-mono text-lg font-semibold text-zinc-200">
-            {signal.limit_price ? `$${signal.limit_price.toFixed(2)}` : '\u2014'}
+            {signal.limit_price ? fmt(signal.limit_price) : '\u2014'}
           </div>
         </div>
         <div className="rounded-md bg-zinc-900/50 p-3">
           <div className="text-xs text-zinc-500">Stop Loss</div>
           <div className="font-mono text-lg font-semibold text-zinc-200">
-            {signal.stop_price ? `$${signal.stop_price.toFixed(2)}` : '\u2014'}
+            {signal.stop_price ? fmt(signal.stop_price) : '\u2014'}
           </div>
         </div>
       </div>

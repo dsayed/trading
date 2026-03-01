@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from trading.api.dependencies import get_config_repo
+from trading.api.dependencies import get_config_repo, invalidate_data_provider
 from trading.api.schemas import ConfigResponse, ConfigUpdateRequest
 from trading.core.config import TradingConfig
 from trading.core.repositories import ConfigRepo
@@ -38,6 +38,7 @@ def _to_response(config: TradingConfig) -> ConfigResponse:
         polygon_api_key_hint=poly_hint,
         options_provider=config.options_provider,
         discovery_provider=config.discovery_provider,
+        forex_provider=config.forex_provider,
         fmp_api_key_set=fmp_set,
         fmp_api_key_hint=fmp_hint,
         marketdata_api_key_set=md_set,
@@ -52,10 +53,20 @@ async def get_config(repo: ConfigRepo = Depends(get_config_repo)) -> ConfigRespo
     return _to_response(repo.get())
 
 
+_PROVIDER_FIELDS = {
+    "data_provider", "options_provider", "discovery_provider", "forex_provider",
+    "polygon_api_key", "fmp_api_key", "marketdata_api_key", "twelvedata_api_key",
+}
+
+
 @router.put("", response_model=ConfigResponse)
 async def update_config(
     body: ConfigUpdateRequest,
     repo: ConfigRepo = Depends(get_config_repo),
 ) -> ConfigResponse:
-    config = repo.update(**body.model_dump(exclude_none=True))
+    updates = body.model_dump(exclude_none=True)
+    config = repo.update(**updates)
+    # Invalidate cached data provider if any provider-related field changed
+    if updates.keys() & _PROVIDER_FIELDS:
+        invalidate_data_provider()
     return _to_response(config)
