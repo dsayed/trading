@@ -5,6 +5,7 @@ from trading.core.engine import TradingEngine
 from trading.core.factory import build_advisors, build_engine
 from trading.plugins.data.cache import CachingDataProvider
 from trading.plugins.data.composite import CompositeDataProvider
+from trading.plugins.strategies.intermarket import IntermarketStrategy
 
 
 class TestBuildEngine:
@@ -115,3 +116,20 @@ class TestBuildAdvisors:
     def test_empty_list_returns_empty(self):
         advisors = build_advisors([])
         assert len(advisors) == 0
+
+
+class TestIntermarketWiring:
+    def test_intermarket_strategy_receives_data_provider(self):
+        config = TradingConfig(strategies=["intermarket"])
+        engine = build_engine(config)
+        assert len(engine.strategies) == 1
+        strategy = engine.strategies[0]
+        assert isinstance(strategy, IntermarketStrategy)
+        assert strategy._data_provider is engine.data_provider
+
+    def test_non_intermarket_strategies_unaffected(self):
+        config = TradingConfig(strategies=["momentum", "intermarket"])
+        engine = build_engine(config)
+        assert len(engine.strategies) == 2
+        assert engine.strategies[0].name == "momentum"
+        assert engine.strategies[1].name == "intermarket"

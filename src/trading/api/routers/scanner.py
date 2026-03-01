@@ -16,24 +16,105 @@ from trading.api.schemas import (
     SignalResponse,
     UniverseResponse,
 )
+from trading.core.config import TradingConfig
 from trading.core.engine import TradingEngine
-from trading.core.factory import build_engine
+from trading.core.factory import STRATEGIES, build_engine
 from trading.core.repositories import ConfigRepo, ScanRepo
+from trading.plugins.data._universes import SYMBOL_NAMES
 from trading.plugins.data.base import DiscoveryProvider
 from trading.plugins.data.cache import CachingDataProvider
 from trading.plugins.data.composite import CompositeDataProvider
 
 router = APIRouter(prefix="/api/scanner", tags=["scanner"])
 
-PREDEFINED_UNIVERSES = ["sp500", "nasdaq100", "forex_majors"]
+PREDEFINED_UNIVERSES = [
+    "sp500", "nasdaq100", "dow30", "smallcap100", "forex_majors",
+    "technology", "healthcare", "financials", "consumer_discretionary",
+    "communication_services", "industrials", "consumer_staples",
+    "energy", "utilities", "real_estate", "materials",
+]
 DYNAMIC_UNIVERSES = ["gainers", "losers", "most_active"]
+
+# Providers that only support stock/equity data (no forex)
+STOCKS_ONLY_PROVIDERS = {"marketdata"}
+
+# Holding period presets: map to strategy constructor overrides
+HOLDING_PERIOD_PRESETS: dict[str, dict[str, int]] = {
+    "swing": {"short_window": 5, "long_window": 20, "lookback_days": 60},
+    "position": {"short_window": 10, "long_window": 50, "lookback_days": 120},
+    "longterm": {"short_window": 20, "long_window": 100, "lookback_days": 250},
+}
+
+
+def _build_engine_with_holding_period(
+    config: TradingConfig, holding_period: str | None,
+) -> TradingEngine:
+    """Build engine, optionally overriding strategy params for a holding period."""
+    if not holding_period or holding_period not in HOLDING_PERIOD_PRESETS:
+        return build_engine(config)
+
+    preset = HOLDING_PERIOD_PRESETS[holding_period]
+    # Build with overridden strategy params
+    from trading.plugins.data.cache import CachingDataProvider as _Caching
+    from trading.plugins.data.composite import CompositeDataProvider as _Composite
+    from trading.core.factory import _build_provider, DATA_PROVIDERS
+
+    bars_provider = _build_provider(config.data_provider, config)
+
+    if config.options_provider or config.discovery_provider or config.forex_provider:
+        from trading.plugins.data.base import OptionsDataProvider as _OptProto
+        options = _build_provider(config.options_provider, config) if config.options_provider else None
+        if options is None and isinstance(bars_provider, _OptProto):
+            options = bars_provider
+        discovery = _build_provider(config.discovery_provider, config) if config.discovery_provider else None
+        forex = _build_provider(config.forex_provider, config) if config.forex_provider else None
+        raw_provider = _Composite(bars_provider, options_provider=options, discovery_provider=discovery, forex_provider=forex)
+    else:
+        raw_provider = bars_provider
+
+    data_provider = _Caching(raw_provider)
+
+    strategies = []
+    for name in config.strategies:
+        cls = STRATEGIES.get(name)
+        if not cls:
+            continue
+        # Pass short_window/long_window/data_provider if the strategy accepts them
+        import inspect
+        sig = inspect.signature(cls.__init__)
+        kwargs: dict[str, object] = {}
+        if "short_window" in sig.parameters:
+            kwargs["short_window"] = preset["short_window"]
+        if "long_window" in sig.parameters:
+            kwargs["long_window"] = preset["long_window"]
+        if "data_provider" in sig.parameters:
+            kwargs["data_provider"] = data_provider
+        strategies.append(cls(**kwargs))
+
+    from trading.core.factory import RISK_MANAGERS, BROKERS
+    risk_manager = RISK_MANAGERS[config.risk_manager](
+        stake=config.stake,
+        max_position_pct=config.max_position_pct,
+        stop_loss_pct=config.stop_loss_pct,
+    )
+    broker = BROKERS[config.broker]()
+
+    return TradingEngine(
+        data_provider=data_provider,
+        strategies=strategies,
+        risk_manager=risk_manager,
+        broker=broker,
+        config=config,
+    )
 
 
 def _result_to_signal(result: dict) -> SignalResponse:
     signal = result["signal"]
     order = result["order"]
+    sym = signal.instrument.symbol
     return SignalResponse(
-        symbol=signal.instrument.symbol,
+        symbol=sym,
+        company_name=SYMBOL_NAMES.get(sym),
         direction=signal.direction.value,
         conviction=signal.conviction,
         rationale=signal.rationale,
@@ -51,6 +132,7 @@ def _results_to_serializable(results: list[dict]) -> list[dict]:
     return [
         {
             "symbol": r["signal"].instrument.symbol,
+            "company_name": SYMBOL_NAMES.get(r["signal"].instrument.symbol),
             "direction": r["signal"].direction.value,
             "conviction": r["signal"].conviction,
             "rationale": r["signal"].rationale,
@@ -82,6 +164,25 @@ def _resolve_symbols(
 
     if not body.universe:
         raise HTTPException(status_code=422, detail="Provide universe or symbols")
+
+    # Validate forex + stocks-only provider mismatch
+    # Allow if a forex_provider override is configured (CompositeDataProvider routes it)
+    has_forex_override = (
+        isinstance(raw_provider, CompositeDataProvider)
+        and raw_provider.supports_forex
+    )
+    if (
+        body.universe.lower() == "forex_majors"
+        and provider_name in STOCKS_ONLY_PROVIDERS
+        and not has_forex_override
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{provider_name}' is a stocks-only provider and cannot fetch forex data. "
+                   f"Switch your primary provider to one that supports forex "
+                   f"(polygon, twelvedata, yahoo), set a Forex Provider override in Settings, "
+                   f"or choose a different universe.",
+        )
 
     # Check discovery support — CompositeDataProvider has explicit flag,
     # otherwise fall back to protocol isinstance check
@@ -134,14 +235,19 @@ async def run_scanner(
     scan_repo: ScanRepo = Depends(get_scan_repo),
 ) -> ScannerResponse:
     config = config_repo.get()
-    engine = build_engine(config)
+    engine = _build_engine_with_holding_period(config, body.holding_period)
     symbols, universe_label = _resolve_symbols(body, engine, config.data_provider)
+
+    # Holding period can override lookback_days
+    lookback = body.lookback_days
+    if body.holding_period and body.holding_period in HOLDING_PERIOD_PRESETS:
+        lookback = HOLDING_PERIOD_PRESETS[body.holding_period]["lookback_days"]
 
     results = await asyncio.to_thread(
         engine.discover,
         symbols,
         body.strategies,
-        body.lookback_days,
+        lookback,
         body.max_results,
     )
 
@@ -170,13 +276,33 @@ async def run_scanner_stream(
 ) -> StreamingResponse:
     """SSE endpoint — streams progress events then the final result."""
     config = config_repo.get()
-    engine = build_engine(config)
+    engine = _build_engine_with_holding_period(config, body.holding_period)
     symbols, universe_label = _resolve_symbols(body, engine, config.data_provider)
+
+    # Holding period can override lookback_days
+    lookback = body.lookback_days
+    if body.holding_period and body.holding_period in HOLDING_PERIOD_PRESETS:
+        lookback = HOLDING_PERIOD_PRESETS[body.holding_period]["lookback_days"]
 
     progress_queue: asyncio.Queue[str | None] = asyncio.Queue()
 
     def on_progress(msg: str) -> None:
         progress_queue.put_nowait(msg)
+
+    # Emit initial provider info so users see which provider is active
+    provider_label = config.data_provider
+    overrides = []
+    if config.discovery_provider:
+        overrides.append(f"discovery: {config.discovery_provider}")
+    if config.forex_provider:
+        overrides.append(f"forex: {config.forex_provider}")
+    if overrides:
+        provider_label += f" ({', '.join(overrides)})"
+    on_progress(
+        f"Provider: {provider_label} | "
+        f"Universe: {universe_label} | "
+        f"Symbols: {len(symbols)}"
+    )
 
     async def run_in_background() -> list[dict]:
         try:
@@ -184,7 +310,7 @@ async def run_scanner_stream(
                 engine.discover,
                 symbols,
                 body.strategies,
-                body.lookback_days,
+                lookback,
                 body.max_results,
                 on_progress,
             )

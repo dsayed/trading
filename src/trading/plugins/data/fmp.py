@@ -1,7 +1,7 @@
 """Financial Modeling Prep (FMP) data provider plugin.
 
 Implements DataProvider and DiscoveryProvider protocols.
-FMP has excellent screener/discovery APIs ($22/mo) and broad stock data.
+Uses the /stable/ API namespace (v3 endpoints deprecated Aug 2025).
 Requires FMP_API_KEY environment variable or passed directly.
 """
 
@@ -16,6 +16,14 @@ import pandas as pd
 import requests
 
 from trading.core.models import Instrument
+from trading.plugins.data._universes import (
+    DOW30_CONSTITUENTS,
+    GICS_SECTORS,
+    NASDAQ100_CONSTITUENTS,
+    SMALLCAP100_CONSTITUENTS,
+    SP500_CONSTITUENTS,
+)
+from trading.plugins.data.base import log_api_call
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +39,8 @@ class FMPProvider:
     """Fetches market data from Financial Modeling Prep.
 
     Implements DataProvider and DiscoveryProvider protocols.
-    FMP excels at discovery/screening with accurate S&P 500 and NASDAQ 100
-    constituent lists and market movers.
+    Uses hardcoded constituent lists for S&P 500 / NASDAQ 100 discovery
+    (FMP free tier no longer exposes constituent or movers endpoints).
     """
 
     def __init__(
@@ -67,9 +75,17 @@ class FMPProvider:
         all_params = {"apikey": self._api_key}
         if params:
             all_params.update(params)
-        resp = self._session.get(url, params=all_params, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
+        t0 = time.monotonic()
+        try:
+            resp = self._session.get(url, params=all_params, timeout=30)
+            resp.raise_for_status()
+            elapsed = (time.monotonic() - t0) * 1000
+            log_api_call("fmp", "GET", path, elapsed)
+            return resp.json()
+        except Exception as exc:
+            elapsed = (time.monotonic() - t0) * 1000
+            log_api_call("fmp", "GET", path, elapsed, "error", str(exc))
+            raise
 
     @property
     def name(self) -> str:
@@ -80,11 +96,15 @@ class FMPProvider:
     def fetch_bars(
         self, instrument: Instrument, start: date, end: date
     ) -> pd.DataFrame:
-        """Fetch daily OHLCV bars via FMP historical price endpoint."""
+        """Fetch daily OHLCV bars via FMP stable endpoint."""
         try:
             data = self._get(
-                f"/api/v3/historical-price-full/{instrument.symbol}",
-                {"from": start.isoformat(), "to": end.isoformat()},
+                "/stable/historical-price-eod/full",
+                {
+                    "symbol": instrument.symbol,
+                    "from": start.isoformat(),
+                    "to": end.isoformat(),
+                },
             )
         except Exception:
             logger.warning(
@@ -92,12 +112,13 @@ class FMPProvider:
             )
             return pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
 
-        historical = data.get("historical", []) if isinstance(data, dict) else []
-        if not historical:
+        # Stable endpoint returns a flat list of bar objects
+        bars_list = data if isinstance(data, list) else []
+        if not bars_list:
             return pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
 
         rows = []
-        for bar in historical:
+        for bar in bars_list:
             rows.append({
                 "timestamp": pd.Timestamp(bar["date"]),
                 "open": bar["open"],
@@ -117,60 +138,34 @@ class FMPProvider:
         """Return symbols for a named universe.
 
         Supported: 'sp500', 'nasdaq100', 'forex_majors'.
-        FMP has dedicated endpoints for index constituents.
+        Uses hardcoded constituent lists (FMP free tier deprecated
+        constituent API endpoints in Aug 2025).
         """
         name = universe_name.lower()
 
         if name == "forex_majors":
             return list(FOREX_MAJORS)
 
-        endpoint_map = {
-            "sp500": "/api/v3/sp500_constituent",
-            "nasdaq100": "/api/v3/nasdaq_constituent",
+        universe_map: dict[str, list[str]] = {
+            "sp500": SP500_CONSTITUENTS,
+            "nasdaq100": NASDAQ100_CONSTITUENTS,
+            "dow30": DOW30_CONSTITUENTS,
+            "smallcap100": SMALLCAP100_CONSTITUENTS,
         }
 
-        if name not in endpoint_map:
-            logger.warning("Unknown universe: %s", universe_name)
-            return []
+        if name in universe_map:
+            return list(universe_map[name])
 
-        try:
-            data = self._get(endpoint_map[name])
-            if isinstance(data, list):
-                return [item["symbol"] for item in data if "symbol" in item]
-            return []
-        except Exception:
-            logger.warning(
-                "Failed to list universe %s", universe_name, exc_info=True
-            )
-            return []
+        if name in GICS_SECTORS:
+            return list(GICS_SECTORS[name])
+
+        logger.warning("Unknown universe: %s", universe_name)
+        return []
 
     def get_movers(self, direction: str = "gainers", limit: int = 20) -> list[dict]:
-        """Get top movers (gainers/losers) via FMP market movers endpoint."""
-        endpoint_map = {
-            "gainers": "/api/v3/stock_market/gainers",
-            "losers": "/api/v3/stock_market/losers",
-        }
-
-        endpoint = endpoint_map.get(direction, endpoint_map["gainers"])
-
-        try:
-            data = self._get(endpoint)
-        except Exception:
-            logger.warning(
-                "Failed to fetch movers (%s)", direction, exc_info=True
-            )
-            return []
-
-        if not isinstance(data, list):
-            return []
-
-        results = []
-        for item in data[:limit]:
-            results.append({
-                "symbol": item.get("symbol", ""),
-                "change_pct": round(float(item.get("changesPercentage", 0)), 2),
-                "volume": int(item.get("volume", 0) or 0),
-                "price": round(float(item.get("price", 0)), 2),
-            })
-
-        return results
+        """Return empty list — FMP free tier no longer supports movers."""
+        logger.warning(
+            "FMP movers endpoint not available on free tier. "
+            "Use polygon as discovery provider for dynamic movers."
+        )
+        return []

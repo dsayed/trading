@@ -15,6 +15,12 @@ from datetime import date
 import pandas as pd
 
 from trading.core.models import Instrument, OptionChain, OptionContract
+from trading.plugins.data._universes import (
+    DOW30_CONSTITUENTS,
+    GICS_SECTORS,
+    SMALLCAP100_CONSTITUENTS,
+)
+from trading.plugins.data.base import log_api_call
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +82,7 @@ class PolygonProvider:
 
         try:
             self._throttle()
+            t0 = time.monotonic()
             aggs = list(
                 self._client.list_aggs(
                     ticker=ticker,
@@ -86,7 +93,11 @@ class PolygonProvider:
                     limit=50000,
                 )
             )
-        except Exception:
+            elapsed = (time.monotonic() - t0) * 1000
+            log_api_call("polygon", "SDK", f"list_aggs({ticker})", elapsed)
+        except Exception as exc:
+            elapsed = (time.monotonic() - t0) * 1000
+            log_api_call("polygon", "SDK", f"list_aggs({ticker})", elapsed, "error", str(exc))
             logger.warning(
                 "Failed to fetch bars for %s", instrument.symbol, exc_info=True
             )
@@ -223,6 +234,15 @@ class PolygonProvider:
         }
 
         if name not in exchange_map:
+            # Fallback to hardcoded lists for universes without API support
+            hardcoded: dict[str, list[str]] = {
+                "dow30": DOW30_CONSTITUENTS,
+                "smallcap100": SMALLCAP100_CONSTITUENTS,
+            }
+            if name in hardcoded:
+                return list(hardcoded[name])
+            if name in GICS_SECTORS:
+                return list(GICS_SECTORS[name])
             logger.warning("Unknown universe: %s", universe_name)
             return []
 
