@@ -2,6 +2,8 @@
 
 Step-by-step instructions to get the trading system running on your machine. Works on macOS, Linux, and Windows.
 
+> **Windows users:** This guide uses **PowerShell** for all Windows commands. Open PowerShell by pressing `Win+X` and selecting "Terminal" (or search for "PowerShell" in the Start menu). Do **not** use Git Bash or Command Prompt — the commands below are written specifically for PowerShell.
+
 ---
 
 ## What You're Setting Up
@@ -39,11 +41,25 @@ sudo apt update && sudo apt install git
 sudo dnf install git
 ```
 
-**Windows:**
-Download and run the installer from https://git-scm.com/download/win — accept all defaults. Then open "Git Bash" for the remaining steps (or use PowerShell).
+**Windows (PowerShell):**
+```powershell
+# Option 1: Install via winget (built into Windows 10/11)
+winget install --id Git.Git -e --source winget
+
+# Option 2: Download the installer from https://git-scm.com/download/win
+# During installation, select "Add to PATH" and choose "Use Git from the Windows Command Line and also from 3rd-party software"
+```
+
+After installing, **close and reopen PowerShell** so the `git` command is available.
 
 **Verify it works:**
+
+macOS / Linux:
 ```bash
+git --version
+```
+Windows (PowerShell):
+```powershell
 git --version
 ```
 You should see something like `git version 2.x.x`.
@@ -61,13 +77,25 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 **Windows (PowerShell):**
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+irm https://astral.sh/uv/install.ps1 | iex
 ```
 
-After installing, **close and reopen your terminal** so the `uv` command is available.
+> If you get a "running scripts is disabled" error, first run:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+> Then retry the `irm` command above.
+
+After installing, **close and reopen PowerShell** so the `uv` command is available.
 
 **Verify it works:**
+
+macOS / Linux:
 ```bash
+uv --version
+```
+Windows (PowerShell):
+```powershell
 uv --version
 ```
 You should see something like `uv 0.x.x`.
@@ -97,11 +125,26 @@ sudo apt install -y nodejs
 sudo dnf install nodejs
 ```
 
-**Windows:**
-Download and run the installer from https://nodejs.org (choose the LTS version). Accept all defaults.
+**Windows (PowerShell):**
+```powershell
+# Option 1: Install via winget
+winget install OpenJS.NodeJS.LTS
+
+# Option 2: Download the LTS installer from https://nodejs.org
+# Accept all defaults during installation
+```
+
+After installing, **close and reopen PowerShell** so `node` and `npm` are available.
 
 **Verify it works:**
+
+macOS / Linux:
 ```bash
+node --version
+npm --version
+```
+Windows (PowerShell):
+```powershell
 node --version
 npm --version
 ```
@@ -113,12 +156,19 @@ You should see version numbers for both (Node `v20.x.x` or higher, npm `10.x.x` 
 
 Open a terminal and run:
 
+macOS / Linux:
 ```bash
 git clone https://github.com/dsayed/trading.git
 cd trading
 ```
 
-Replace the URL with the actual repository URL if it's different. You should now be inside the `trading/` folder.
+Windows (PowerShell):
+```powershell
+git clone https://github.com/dsayed/trading.git
+cd trading
+```
+
+Replace the URL with the actual repository URL if it's different. You should now be inside the `trading\` folder.
 
 ---
 
@@ -130,6 +180,8 @@ Replace the URL with the actual repository URL if it's different. You should now
 uv sync --extra dev
 ```
 
+> This command is the same on all platforms — `uv` works identically in PowerShell.
+
 This command:
 - Downloads Python 3.12 if you don't have it
 - Creates a virtual environment (`.venv/` folder)
@@ -139,8 +191,14 @@ It takes 1-2 minutes on a fresh install.
 
 ### Create a config file
 
+macOS / Linux:
 ```bash
 cp config.example.toml config.toml
+```
+
+Windows (PowerShell):
+```powershell
+Copy-Item config.example.toml config.toml
 ```
 
 This copies the example configuration. Open `config.toml` in any text editor and customize if you want:
@@ -155,11 +213,15 @@ watchlist = ["AAPL", "MSFT", "GOOG", "AMZN", "NVDA"]
 
 The defaults are fine to start with.
 
+> **Windows tip:** You can open the file in Notepad with `notepad config.toml`, or use VS Code with `code config.toml`.
+
 ### Verify the backend works
 
 ```bash
 uv run pytest -k "not slow"
 ```
+
+> Same command on all platforms.
 
 You should see all tests passing (200+ tests, 0 failures). If you see errors here, something went wrong with the install — check the error message.
 
@@ -176,16 +238,27 @@ INFO:     Uvicorn running on http://0.0.0.0:9000
 INFO:     Started reloader process
 ```
 
-**Leave this terminal running.** The server needs to stay running while you use the dashboard. Open a **new terminal window/tab** for the next steps.
+**Leave this terminal running.** The server needs to stay running while you use the dashboard.
+
+**Open a new terminal:**
+- **macOS/Linux:** Open a new terminal tab (`Cmd+T` or `Ctrl+Shift+T`)
+- **Windows:** Right-click the PowerShell tab bar and select "New Tab", or press `Ctrl+Shift+T` in Windows Terminal
 
 ---
 
 ## Step 3: Set Up the Dashboard (Frontend)
 
-Open a **new terminal** (keep the server running in the first one), then:
+Open a **new terminal** (keep the server running in the first one), then navigate to the dashboard folder:
 
+macOS / Linux:
 ```bash
 cd trading/dashboard
+npm install
+```
+
+Windows (PowerShell):
+```powershell
+cd trading\dashboard
 npm install
 ```
 
@@ -258,11 +331,13 @@ uv run trading scan
 uv run trading scan --explain AAPL
 ```
 
+> Same commands on all platforms — `uv run` works identically in PowerShell.
+
 ---
 
 ## Stopping the Servers
 
-To stop either server, press `Ctrl+C` in its terminal window.
+To stop either server, press `Ctrl+C` in its terminal window. This works the same on all platforms, including PowerShell.
 
 ---
 
@@ -271,14 +346,28 @@ To stop either server, press `Ctrl+C` in its terminal window.
 After the initial setup, you only need two commands to start (in separate terminals):
 
 **Terminal 1 — Backend:**
+
+macOS / Linux:
 ```bash
+cd trading
+uv run trading-server
+```
+Windows (PowerShell):
+```powershell
 cd trading
 uv run trading-server
 ```
 
 **Terminal 2 — Frontend:**
+
+macOS / Linux:
 ```bash
 cd trading/dashboard
+npm run dev
+```
+Windows (PowerShell):
+```powershell
+cd trading\dashboard
 npm run dev
 ```
 
@@ -290,13 +379,19 @@ Then open http://localhost:5173 in your browser.
 
 Instead of running two dev servers, you can build the dashboard and serve everything from the Python server:
 
+macOS / Linux:
 ```bash
-# Build the frontend
 cd dashboard
 npm run build
 cd ..
+uv run trading-server
+```
 
-# Start the server (serves both API and dashboard)
+Windows (PowerShell):
+```powershell
+cd dashboard
+npm run build
+cd ..
 uv run trading-server
 ```
 
@@ -306,35 +401,81 @@ Then open http://localhost:9000 in your browser. Everything runs from one server
 
 ## Troubleshooting
 
-### "command not found: uv"
+### All Platforms
+
+#### "command not found: uv" (or PowerShell: "uv: The term 'uv' is not recognized")
 Close your terminal and open a new one. If it still doesn't work, re-run the uv install command from [Prerequisites](#install-uv-python-package-manager).
 
-### "command not found: npm" or "command not found: node"
+#### "command not found: npm" or "command not found: node"
 Node.js isn't installed or isn't in your PATH. Re-install from https://nodejs.org and restart your terminal.
 
-### Tests fail with import errors
+#### Tests fail with import errors
 Make sure you ran `uv sync --extra dev` (not just `uv sync`). The `--extra dev` flag installs test dependencies.
 
-### "Address already in use" when starting the server
+#### "Address already in use" when starting the server
 Another process is using port 9000 (or 5173). Either stop that process or:
 - For the Python server, the port is set in `src/trading/api/server.py`
 - For the frontend dev server, Vite will automatically try the next available port
 
-### Dashboard shows "Request failed" or network errors
+To find what's using the port:
+
+macOS / Linux:
+```bash
+lsof -i :9000
+```
+Windows (PowerShell):
+```powershell
+Get-NetTCPConnection -LocalPort 9000 | Select-Object OwningProcess
+# Then find the process name:
+Get-Process -Id <PID>
+```
+
+#### Dashboard shows "Request failed" or network errors
 Make sure the Python backend is running in another terminal (`uv run trading-server`). The dashboard needs the API server at port 9000.
 
-### Scans return no signals
+#### Scans return no signals
 This is normal — it means the momentum strategy doesn't see strong setups for the stocks in your watchlist right now. Try adding more symbols or checking back on a different day.
 
-### Windows: "running scripts is disabled on this system"
-Open PowerShell as Administrator and run:
+---
+
+### Windows-Specific
+
+#### "running scripts is disabled on this system"
+This is PowerShell's default execution policy blocking scripts. Run this once (no admin required):
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
+Then close and reopen PowerShell.
 
-### Windows: line ending issues with Git
-If you see strange errors about files, configure Git to handle line endings:
-```bash
+#### "The term 'X' is not recognized as the name of a cmdlet"
+This usually means the tool wasn't added to your PATH during installation. Fix:
+1. Close **all** PowerShell windows
+2. Open a fresh PowerShell window
+3. Try the command again
+
+If it still fails, the installer didn't update PATH. You can check your PATH with:
+```powershell
+$env:PATH -split ';'
+```
+Look for the tool's install directory (e.g., `C:\Users\<you>\.local\bin` for uv, `C:\Program Files\nodejs` for Node).
+
+#### Line ending issues with Git
+If you see strange errors about files or tests fail unexpectedly, configure Git to handle Windows line endings:
+```powershell
 git config --global core.autocrlf true
 ```
-Then re-clone the repository.
+Then delete the `trading` folder and re-clone the repository.
+
+#### Windows Defender / antivirus slows down `npm install`
+If `npm install` is extremely slow, your antivirus may be scanning every file. Add your project folder to the exclusions list:
+```powershell
+# Run PowerShell as Administrator for this command:
+Add-MpPreference -ExclusionPath "$HOME\trading"
+```
+
+#### Port access denied
+If the server can't bind to a port, Windows Firewall may be blocking it. You shouldn't need to change firewall settings for localhost, but if you do:
+```powershell
+# Run PowerShell as Administrator:
+New-NetFirewallRule -DisplayName "Trading Server" -Direction Inbound -LocalPort 9000 -Protocol TCP -Action Allow
+```
