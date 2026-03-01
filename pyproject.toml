@@ -8,10 +8,14 @@ dependencies = [
     "pandas>=2.0",
     "numpy>=1.26",
     "yfinance>=0.2",
+    "polygon-api-client>=1.14",
+    "requests>=2.31",
+    "twelvedata>=1.0",
     "typer>=0.12",
     "rich>=13.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
+    "python-multipart>=0.0.18",
 ]
 
 [project.optional-dependencies]

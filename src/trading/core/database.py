@@ -19,6 +19,12 @@ CREATE TABLE IF NOT EXISTS config (
     strategies TEXT NOT NULL DEFAULT '["momentum"]',
     risk_manager TEXT NOT NULL DEFAULT 'fixed_stake',
     broker TEXT NOT NULL DEFAULT 'manual',
+    polygon_api_key TEXT,
+    options_provider TEXT,
+    discovery_provider TEXT,
+    fmp_api_key TEXT,
+    marketdata_api_key TEXT,
+    twelvedata_api_key TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -82,3 +88,19 @@ class Database:
     def _init_schema(self) -> None:
         with self.connection() as conn:
             conn.executescript(SCHEMA_SQL)
+            self._migrate(conn)
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Run forward-only schema migrations for existing databases."""
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(config)").fetchall()
+        }
+        if "polygon_api_key" not in columns:
+            conn.execute("ALTER TABLE config ADD COLUMN polygon_api_key TEXT")
+        for col in (
+            "options_provider", "discovery_provider",
+            "fmp_api_key", "marketdata_api_key", "twelvedata_api_key",
+        ):
+            if col not in columns:
+                conn.execute(f"ALTER TABLE config ADD COLUMN {col} TEXT")

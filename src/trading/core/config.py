@@ -20,6 +20,12 @@ class TradingConfig(BaseModel):
     risk_manager: str = "fixed_stake"
     broker: str = "manual"
     watchlist: list[str] = Field(default_factory=list)
+    polygon_api_key: str | None = None
+    options_provider: str | None = None
+    discovery_provider: str | None = None
+    fmp_api_key: str | None = None
+    marketdata_api_key: str | None = None
+    twelvedata_api_key: str | None = None
 
 
 def load_config(path: Path) -> TradingConfig:

@@ -3,6 +3,8 @@
 from trading.core.config import TradingConfig
 from trading.core.engine import TradingEngine
 from trading.core.factory import build_advisors, build_engine
+from trading.plugins.data.cache import CachingDataProvider
+from trading.plugins.data.composite import CompositeDataProvider
 
 
 class TestBuildEngine:
@@ -38,6 +40,55 @@ class TestBuildEngine:
         config = TradingConfig(stake=7500)
         engine = build_engine(config)
         assert engine.cash == 7500
+
+
+class TestBuildEngineComposite:
+    def test_no_overrides_uses_single_provider(self):
+        config = TradingConfig(watchlist=["AAPL"])
+        engine = build_engine(config)
+        # No composite — just CachingDataProvider wrapping the single provider
+        assert isinstance(engine.data_provider, CachingDataProvider)
+        assert not isinstance(engine.data_provider._inner, CompositeDataProvider)
+
+    def test_options_override_creates_composite(self, monkeypatch):
+        monkeypatch.setenv("MARKETDATA_API_KEY", "test-key")
+        config = TradingConfig(
+            watchlist=["AAPL"],
+            options_provider="marketdata",
+            marketdata_api_key="test-key",
+        )
+        engine = build_engine(config)
+        inner = engine.data_provider._inner
+        assert isinstance(inner, CompositeDataProvider)
+        assert inner.supports_options is True
+
+    def test_discovery_override_creates_composite(self, monkeypatch):
+        monkeypatch.setenv("FMP_API_KEY", "test-key")
+        config = TradingConfig(
+            watchlist=["AAPL"],
+            discovery_provider="fmp",
+            fmp_api_key="test-key",
+        )
+        engine = build_engine(config)
+        inner = engine.data_provider._inner
+        assert isinstance(inner, CompositeDataProvider)
+        assert inner.supports_discovery is True
+
+    def test_composite_name_concatenates(self, monkeypatch):
+        monkeypatch.setenv("FMP_API_KEY", "test-key")
+        monkeypatch.setenv("MARKETDATA_API_KEY", "test-key")
+        config = TradingConfig(
+            watchlist=["AAPL"],
+            options_provider="marketdata",
+            discovery_provider="fmp",
+            marketdata_api_key="test-key",
+            fmp_api_key="test-key",
+        )
+        engine = build_engine(config)
+        inner = engine.data_provider._inner
+        assert "yahoo" in inner.name
+        assert "marketdata" in inner.name
+        assert "fmp" in inner.name
 
 
 class TestBuildAdvisors:

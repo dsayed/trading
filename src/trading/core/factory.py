@@ -10,13 +10,31 @@ from trading.plugins.advisors.covered_call import CoveredCallAdvisor
 from trading.plugins.advisors.protective_put import ProtectivePutAdvisor
 from trading.plugins.advisors.stock_play import StockPlayAdvisor
 from trading.plugins.brokers.manual import ManualBroker
+from trading.plugins.data.cache import CachingDataProvider
+from trading.plugins.data.composite import CompositeDataProvider
+from trading.plugins.data.fmp import FMPProvider
+from trading.plugins.data.marketdata import MarketDataProvider
+from trading.plugins.data.polygon import PolygonProvider
+from trading.plugins.data.twelvedata import TwelveDataProvider
 from trading.plugins.data.yahoo import YahooFinanceProvider
 from trading.plugins.risk.fixed_stake import FixedStakeRiskManager
+from trading.plugins.strategies.income import IncomeStrategy
+from trading.plugins.strategies.mean_reversion import MeanReversionStrategy
 from trading.plugins.strategies.momentum import MomentumStrategy
 
 # Plugin registries — maps config string names to implementation classes
-DATA_PROVIDERS = {"yahoo": YahooFinanceProvider}
-STRATEGIES = {"momentum": MomentumStrategy}
+DATA_PROVIDERS: dict[str, type] = {
+    "yahoo": YahooFinanceProvider,
+    "polygon": PolygonProvider,
+    "fmp": FMPProvider,
+    "marketdata": MarketDataProvider,
+    "twelvedata": TwelveDataProvider,
+}
+STRATEGIES: dict[str, type] = {
+    "momentum": MomentumStrategy,
+    "mean_reversion": MeanReversionStrategy,
+    "income": IncomeStrategy,
+}
 RISK_MANAGERS = {"fixed_stake": FixedStakeRiskManager}
 BROKERS = {"manual": ManualBroker}
 ADVISORS: dict[str, type] = {
@@ -25,10 +43,47 @@ ADVISORS: dict[str, type] = {
     "protective_put": ProtectivePutAdvisor,
 }
 
+# Maps provider names to the config field that holds their API key
+_PROVIDER_KEY_FIELDS: dict[str, str] = {
+    "polygon": "polygon_api_key",
+    "fmp": "fmp_api_key",
+    "marketdata": "marketdata_api_key",
+    "twelvedata": "twelvedata_api_key",
+}
+
+
+def _build_provider(name: str, config: TradingConfig) -> Any:
+    """Instantiate a single data provider by name, passing the right API key."""
+    cls = DATA_PROVIDERS[name]
+    key_field = _PROVIDER_KEY_FIELDS.get(name)
+    if key_field:
+        return cls(api_key=getattr(config, key_field))
+    return cls()
+
 
 def build_engine(config: TradingConfig) -> TradingEngine:
     """Build a TradingEngine from config, resolving plugin names to implementations."""
-    data_provider = DATA_PROVIDERS[config.data_provider]()
+    bars_provider = _build_provider(config.data_provider, config)
+
+    # Build composite if role overrides are configured
+    if config.options_provider or config.discovery_provider:
+        options = (
+            _build_provider(config.options_provider, config)
+            if config.options_provider
+            else None
+        )
+        discovery = (
+            _build_provider(config.discovery_provider, config)
+            if config.discovery_provider
+            else None
+        )
+        raw_provider = CompositeDataProvider(
+            bars_provider, options_provider=options, discovery_provider=discovery,
+        )
+    else:
+        raw_provider = bars_provider
+
+    data_provider = CachingDataProvider(raw_provider)
 
     strategies = [
         STRATEGIES[name]() for name in config.strategies if name in STRATEGIES

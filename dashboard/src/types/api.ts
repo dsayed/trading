@@ -6,12 +6,29 @@ export interface Config {
   strategies: string[];
   risk_manager: string;
   broker: string;
+  polygon_api_key_set: boolean;
+  polygon_api_key_hint: string;
+  options_provider: string | null;
+  discovery_provider: string | null;
+  fmp_api_key_set: boolean;
+  fmp_api_key_hint: string;
+  marketdata_api_key_set: boolean;
+  marketdata_api_key_hint: string;
+  twelvedata_api_key_set: boolean;
+  twelvedata_api_key_hint: string;
 }
 
 export interface ConfigUpdate {
   stake?: number;
   max_position_pct?: number;
   stop_loss_pct?: number;
+  data_provider?: string;
+  polygon_api_key?: string;
+  options_provider?: string | null;
+  discovery_provider?: string | null;
+  fmp_api_key?: string;
+  marketdata_api_key?: string;
+  twelvedata_api_key?: string;
 }
 
 export interface Watchlist {
@@ -152,4 +169,61 @@ export interface AdviseRequest {
 
 export interface AdviseResponse {
   positions: PositionAdvice[];
+}
+
+// Scanner
+export interface ScannerRequest {
+  universe?: string;
+  symbols?: string[];
+  strategies?: string[];
+  max_results?: number;
+  lookback_days?: number;
+}
+
+export interface UniverseResponse {
+  predefined: string[];
+  dynamic: string[];
+}
+
+export interface ScannerResponse {
+  id: number;
+  ran_at: string;
+  signal_count: number;
+  universe: string | null;
+  signals: Signal[];
+}
+
+// Import
+export interface ImportedPosition {
+  symbol: string;
+  quantity: number;
+  cost_basis: number;
+  purchase_date: string;
+  asset_class: string;
+  account: string | null;
+  description: string | null;
+  status: 'new' | 'duplicate' | 'warning';
+  warnings: string[];
+}
+
+export interface ImportSummary {
+  total: number;
+  new: number;
+  duplicates: number;
+  warnings: number;
+}
+
+export interface ImportPreviewResponse {
+  broker_detected: string;
+  positions: ImportedPosition[];
+  summary: ImportSummary;
+}
+
+export interface ImportCommitRequest {
+  positions: ImportedPosition[];
+}
+
+export interface ImportCommitResponse {
+  imported: number;
+  positions: Position[];
 }

@@ -18,12 +18,29 @@ class ConfigResponse(BaseModel):
     strategies: list[str]
     risk_manager: str
     broker: str
+    polygon_api_key_set: bool = False
+    polygon_api_key_hint: str = ""
+    options_provider: str | None = None
+    discovery_provider: str | None = None
+    fmp_api_key_set: bool = False
+    fmp_api_key_hint: str = ""
+    marketdata_api_key_set: bool = False
+    marketdata_api_key_hint: str = ""
+    twelvedata_api_key_set: bool = False
+    twelvedata_api_key_hint: str = ""
 
 
 class ConfigUpdateRequest(BaseModel):
     stake: float | None = None
     max_position_pct: float | None = None
     stop_loss_pct: float | None = None
+    data_provider: str | None = None
+    polygon_api_key: str | None = None
+    options_provider: str | None = None
+    discovery_provider: str | None = None
+    fmp_api_key: str | None = None
+    marketdata_api_key: str | None = None
+    twelvedata_api_key: str | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -186,3 +203,68 @@ class AdviseRequest(BaseModel):
 
 class AdviseResponse(BaseModel):
     positions: list[PositionAdviceResponse]
+
+
+# --------------------------------------------------------------------------- #
+#  Scanner
+# --------------------------------------------------------------------------- #
+
+
+class ScannerRequest(BaseModel):
+    universe: str | None = None
+    symbols: list[str] | None = None
+    strategies: list[str] | None = None
+    max_results: int = 20
+    lookback_days: int = 120
+
+
+class UniverseResponse(BaseModel):
+    predefined: list[str]
+    dynamic: list[str]
+
+
+class ScannerResponse(BaseModel):
+    id: int
+    ran_at: str
+    signal_count: int
+    universe: str | None
+    signals: list[SignalResponse]
+
+
+# --------------------------------------------------------------------------- #
+#  Import
+# --------------------------------------------------------------------------- #
+
+
+class ImportedPositionPreview(BaseModel):
+    symbol: str
+    quantity: int
+    cost_basis: float
+    purchase_date: str
+    asset_class: str
+    account: str | None = None
+    description: str | None = None
+    status: str  # "new", "duplicate", "warning"
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ImportSummary(BaseModel):
+    total: int
+    new: int
+    duplicates: int
+    warnings: int
+
+
+class ImportPreviewResponse(BaseModel):
+    broker_detected: str
+    positions: list[ImportedPositionPreview]
+    summary: ImportSummary
+
+
+class ImportCommitRequest(BaseModel):
+    positions: list[ImportedPositionPreview]
+
+
+class ImportCommitResponse(BaseModel):
+    imported: int
+    positions: list[PositionResponse]
