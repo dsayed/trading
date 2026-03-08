@@ -27,34 +27,33 @@ from lib.db import max_date, upsert
 CFTC_ANNUAL_URL = "https://www.cftc.gov/files/dea/history/deahistfo{year}.zip"
 CFTC_CURRENT_URL = "https://www.cftc.gov/files/dea/history/deacot{year}.zip"
 
-# Forex-relevant contracts to track
+# Forex-relevant contracts to track (must match CFTC "Market and Exchange Names" exactly)
 FOREX_CONTRACTS = {
-    "EURO FX":            "EUR",
-    "BRITISH POUND":      "GBP",
-    "JAPANESE YEN":       "JPY",
-    "SWISS FRANC":        "CHF",
-    "CANADIAN DOLLAR":    "CAD",
-    "AUSTRALIAN DOLLAR":  "AUD",
-    "NEW ZEALAND DOLLAR": "NZD",
-    "U.S. DOLLAR INDEX":  "DXY",
+    "EURO FX - CHICAGO MERCANTILE EXCHANGE":            "EUR",
+    "BRITISH POUND - CHICAGO MERCANTILE EXCHANGE":      "GBP",
+    "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE":       "JPY",
+    "SWISS FRANC - CHICAGO MERCANTILE EXCHANGE":        "CHF",
+    "CANADIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE":    "CAD",
+    "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE":  "AUD",
+    "NZ DOLLAR - CHICAGO MERCANTILE EXCHANGE":          "NZD",
     # Equity index futures
-    "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE": "ES",
-    "NASDAQ-100 MINI - CHICAGO MERCANTILE EXCHANGE": "NQ",
+    "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE":     "ES",
+    "NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE":        "NQ",
     # Commodities
-    "GOLD - COMMODITY EXCHANGE INC.":    "GC",
+    "GOLD - COMMODITY EXCHANGE INC.":                   "GC",
     "CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE": "CL",
 }
 
 COT_COLS = {
-    "Market_and_Exchange_Names": "contract_name",
-    "As_of_Date_In_Form_YYMMDD": "report_date_raw",
-    "Open_Interest_All": "open_interest",
-    "Comm_Positions_Long_All": "commercials_long",
-    "Comm_Positions_Short_All": "commercials_short",
-    "NonComm_Positions_Long_All": "large_speculators_long",
-    "NonComm_Positions_Short_All": "large_speculators_short",
-    "NonRept_Positions_Long_All": "small_speculators_long",
-    "NonRept_Positions_Short_All": "small_speculators_short",
+    "Market and Exchange Names":          "contract_name",
+    "As of Date in Form YYMMDD":          "report_date_raw",
+    "Open Interest (All)":                "open_interest",
+    "Commercial Positions-Long (All)":    "commercials_long",
+    "Commercial Positions-Short (All)":   "commercials_short",
+    "Noncommercial Positions-Long (All)": "large_speculators_long",
+    "Noncommercial Positions-Short (All)":"large_speculators_short",
+    "Nonreportable Positions-Long (All)": "small_speculators_long",
+    "Nonreportable Positions-Short (All)":"small_speculators_short",
 }
 
 
