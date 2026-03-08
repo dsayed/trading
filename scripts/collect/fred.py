@@ -13,7 +13,7 @@ sys.path.insert(0, "scripts")
 # Reuse seed_fred logic — it's already incremental
 from seed_fred import SERIES, fetch_observations, fetch_series_info
 from lib.db import max_date, upsert
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 
 
@@ -40,7 +40,7 @@ def main() -> None:
                     written = upsert("macro_series", rows)
                     print(f"  ✓ {series_id}: +{written} new observations")
                     # Update last_synced
-                    upsert("macro_series_meta", [{"series_id": series_id, "last_synced": datetime.utcnow().isoformat()}])
+                    upsert("macro_series_meta", [{"series_id": series_id, "last_synced": datetime.now(timezone.utc).isoformat()}])
                 else:
                     print(f"  - {series_id}: up to date")
             except Exception as exc:

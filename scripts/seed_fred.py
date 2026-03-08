@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 
@@ -124,7 +124,7 @@ def main() -> None:
                     "frequency":   info.get("frequency_short", ""),
                     "units":       info.get("units_short", ""),
                     "category":    category,
-                    "last_synced": datetime.utcnow().isoformat(),
+                    "last_synced": datetime.now(timezone.utc).isoformat(),
                 }
                 upsert("macro_series_meta", [meta_row])
 
