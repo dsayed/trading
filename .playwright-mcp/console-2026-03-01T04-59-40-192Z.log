@@ -1,0 +1,3 @@
+[     176ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:9000/vite.svg:0
+[     184ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:9000/vite.svg:0
+[  221994ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://localhost:9000/api/scanner/run-stream:0

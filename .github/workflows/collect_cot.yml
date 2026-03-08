@@ -1,0 +1,33 @@
+name: Collect — Weekly COT Report
+
+on:
+  schedule:
+    # Every Saturday at 2am UTC (after CFTC Friday 3:30pm ET release)
+    - cron: "0 2 * * 6"
+  workflow_dispatch:
+    inputs:
+      history:
+        description: "Download full history (2010–present)"
+        required: false
+        default: "false"
+        type: boolean
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+
+      - name: Collect COT report
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          if [ "${{ inputs.history }}" = "true" ]; then
+            uv run python scripts/collect/cot.py --history
+          else
+            uv run python scripts/collect/cot.py
+          fi
